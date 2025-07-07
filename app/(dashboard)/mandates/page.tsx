@@ -1,29 +1,28 @@
-// app/(dashboard)/disputes/page.tsx
+// app/(dashboard)/mandates/page.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
-  AlertTriangle,
+  RefreshCw,
+  Plus,
   Search,
   Filter,
   Download,
-  RefreshCw,
   MoreHorizontal,
   Eye,
-  MessageSquare,
-  FileText,
+  Copy,
   CheckCircle,
   XCircle,
   Clock,
-  TrendingUp,
-  TrendingDown,
+  AlertCircle,
+  CreditCard,
   Calendar,
-  DollarSign,
   Shield,
   ChevronLeft,
   ChevronRight,
-  Info
+  Ban,
+  FileText
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,43 +60,54 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar as CalendarComponent } from '@/components/ui/calendar'
 import { format } from 'date-fns'
 import { trpc } from '@/utils/trpc'
-import { formatCurrency, formatDate, cn } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { useDebounce } from '@/hooks/use-debounce'
 
-// Dispute status configurations
+// Mandate status configurations
 const STATUS_CONFIG = {
-  dispute_opened: { label: 'Opened', variant: 'destructive' as const, icon: AlertTriangle },
-  dispute_expired: { label: 'Expired', variant: 'secondary' as const, icon: Clock },
-  dispute_accepted: { label: 'Accepted', variant: 'secondary' as const, icon: CheckCircle },
-  dispute_cancelled: { label: 'Cancelled', variant: 'secondary' as const, icon: XCircle },
-  dispute_challenged: { label: 'Challenged', variant: 'warning' as const, icon: MessageSquare },
-  dispute_won: { label: 'Won', variant: 'success' as const, icon: CheckCircle },
-  dispute_lost: { label: 'Lost', variant: 'destructive' as const, icon: XCircle },
+  active: { label: 'Active', variant: 'success' as const, icon: CheckCircle },
+  inactive: { label: 'Inactive', variant: 'secondary' as const, icon: Clock },
+  pending: { label: 'Pending', variant: 'warning' as const, icon: Clock },
+  revoked: { label: 'Revoked', variant: 'destructive' as const, icon: XCircle },
+  expired: { label: 'Expired', variant: 'secondary' as const, icon: Clock },
 }
 
-// Dispute stage configurations
-const STAGE_CONFIG = {
-  pre_dispute: { label: 'Pre-Dispute', description: 'Initial inquiry from customer' },
-  dispute: { label: 'Dispute', description: 'Formal chargeback initiated' },
-  pre_arbitration: { label: 'Pre-Arbitration', description: 'Second chargeback' },
+// Mandate type configurations
+const MANDATE_TYPES = {
+  single_use: { 
+    label: 'Single Use', 
+    description: 'Can be used for one payment only'
+  },
+  multi_use: { 
+    label: 'Multi Use', 
+    description: 'Can be used for multiple payments'
+  },
 }
 
-interface DisputeFilters {
-  dispute_status?: string[]
-  dispute_stage?: string[]
-  amount_gte?: number
-  amount_lte?: number
+// Payment method types for mandates
+const PAYMENT_METHOD_TYPES = {
+  card: { label: 'Card', icon: CreditCard },
+  sepa_debit: { label: 'SEPA Debit', icon: FileText },
+  ach_debit: { label: 'ACH Debit', icon: FileText },
+  bacs_debit: { label: 'BACS Debit', icon: FileText },
+}
+
+interface MandateFilters {
+  status?: string
+  mandate_type?: string
+  payment_method_type?: string
+  customer_id?: string
   created_after?: Date
   created_before?: Date
 }
 
-export default function DisputesPage() {
+export default function MandatesPage() {
   const router = useRouter()
   const { toast } = useToast()
   
   const [searchQuery, setSearchQuery] = useState('')
-  const [filters, setFilters] = useState<DisputeFilters>({})
+  const [filters, setFilters] = useState<MandateFilters>({})
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [activeTab, setActiveTab] = useState('all')
@@ -110,17 +120,12 @@ export default function DisputesPage() {
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
     ...(debouncedSearch && { 
-      dispute_id: debouncedSearch,
-      payment_id: debouncedSearch,
+      customer_id: debouncedSearch,
+      mandate_id: debouncedSearch,
     }),
-    ...(filters.dispute_status && filters.dispute_status.length > 0 && { 
-      dispute_status: filters.dispute_status 
-    }),
-    ...(filters.dispute_stage && filters.dispute_stage.length > 0 && { 
-      dispute_stage: filters.dispute_stage 
-    }),
-    ...(filters.amount_gte && { amount: { gte: filters.amount_gte * 100 } }),
-    ...(filters.amount_lte && { amount: { lte: filters.amount_lte * 100 } }),
+    ...(filters.status && { mandate_status: filters.status }),
+    ...(filters.mandate_type && { mandate_type: filters.mandate_type }),
+    ...(filters.payment_method_type && { payment_method_type: filters.payment_method_type }),
     ...(filters.created_after && filters.created_before && {
       created: {
         gte: filters.created_after.toISOString(),
@@ -129,62 +134,47 @@ export default function DisputesPage() {
     }),
   }
 
-  // Fetch disputes
-  const { data: disputes, isLoading, refetch } = trpc.disputes.list.useQuery(queryParams)
+  // Fetch mandates
+  const { data: mandates, isLoading, refetch } = trpc.mandates.list.useQuery(queryParams)
 
-  // Fetch dispute statistics
-  const { data: stats } = trpc.disputes.stats.useQuery({
-    time_range: {
-      start_time: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      end_time: new Date().toISOString(),
-    }
-  })
+  // Fetch mandate statistics
+  const { data: stats } = trpc.mandates.stats.useQuery({})
 
-  // Accept dispute mutation
-  const acceptMutation = trpc.disputes.accept.useMutation({
+  // Revoke mandate mutation
+  const revokeMutation = trpc.mandates.revoke.useMutation({
     onSuccess: () => {
       toast({
-        title: 'Dispute Accepted',
-        description: 'The dispute has been accepted and will be processed.',
+        title: 'Mandate Revoked',
+        description: 'The mandate has been revoked successfully.',
       })
       refetch()
     },
     onError: (error) => {
       toast({
-        title: 'Action Failed',
+        title: 'Revoke Failed',
         description: error.message,
         variant: 'destructive',
       })
     },
   })
 
-  // Challenge dispute mutation
-  const challengeMutation = trpc.disputes.challenge.useMutation({
-    onSuccess: () => {
-      toast({
-        title: 'Evidence Submitted',
-        description: 'Your evidence has been submitted successfully.',
-      })
-      refetch()
-    },
-    onError: (error) => {
-      toast({
-        title: 'Submission Failed',
-        description: error.message,
-        variant: 'destructive',
-      })
-    },
-  })
-
-  const handleAcceptDispute = (disputeId: string) => {
-    if (confirm('Are you sure you want to accept this dispute? This action cannot be undone.')) {
-      acceptMutation.mutate({ dispute_id: disputeId })
+  const handleRevokeMandate = (mandateId: string) => {
+    if (confirm('Are you sure you want to revoke this mandate? This action cannot be undone.')) {
+      revokeMutation.mutate({ mandate_id: mandateId })
     }
   }
 
   const handleExport = () => {
     // TODO: Implement export functionality
-    console.log('Exporting disputes...')
+    console.log('Exporting mandates...')
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast({
+      title: 'Copied to clipboard',
+      description: 'The mandate ID has been copied to your clipboard.',
+    })
   }
 
   const getStatusBadge = (status: string) => {
@@ -200,20 +190,10 @@ export default function DisputesPage() {
     )
   }
 
-  const getDaysRemaining = (dueBy?: string) => {
-    if (!dueBy) return null
-    const due = new Date(dueBy)
-    const now = new Date()
-    const days = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    return days
-  }
-
-  const filteredDisputes = disputes?.data.filter(dispute => {
-    if (activeTab === 'action_required') {
-      return ['dispute_opened', 'dispute_challenged'].includes(dispute.dispute_status)
-    }
-    if (activeTab === 'won') return dispute.dispute_status === 'dispute_won'
-    if (activeTab === 'lost') return dispute.dispute_status === 'dispute_lost'
+  const filteredMandates = mandates?.data.filter(mandate => {
+    if (activeTab === 'active') return mandate.mandate_status === 'active'
+    if (activeTab === 'pending') return mandate.mandate_status === 'pending'
+    if (activeTab === 'revoked') return ['revoked', 'expired'].includes(mandate.mandate_status)
     return true
   })
 
@@ -222,112 +202,121 @@ export default function DisputesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Disputes</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Mandates</h1>
           <p className="text-muted-foreground">
-            Manage chargebacks and disputes
+            Manage recurring payment authorizations
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="icon" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4" />
           </Button>
+          <Button onClick={() => router.push('/mandates/create')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Mandate
+          </Button>
         </div>
       </div>
-
-      {/* Alert for urgent disputes */}
-      {stats?.disputes_due_soon && stats.disputes_due_soon > 0 && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Action Required</AlertTitle>
-          <AlertDescription>
-            You have {stats.disputes_due_soon} dispute{stats.disputes_due_soon > 1 ? 's' : ''} due for response within 48 hours.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Disputes</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Mandates</CardTitle>
+            <RefreshCw className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.total_disputes || 0}</div>
+            <div className="text-2xl font-bold">{stats?.total_mandates || 0}</div>
             <p className="text-xs text-muted-foreground">
-              +{stats?.new_disputes_this_month || 0} this month
+              Across all statuses
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
+            <CardTitle className="text-sm font-medium">Active Mandates</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.win_rate?.toFixed(1) || 0}%</div>
-            <Progress value={stats?.win_rate} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-2">
-              {stats?.disputes_won || 0} won, {stats?.disputes_lost || 0} lost
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">At Risk</CardTitle>
-            <DollarSign className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(stats?.amount_at_risk || 0, 'USD')}
-            </div>
+            <div className="text-2xl font-bold">{stats?.active_mandates || 0}</div>
             <p className="text-xs text-muted-foreground">
-              From {stats?.open_disputes || 0} open disputes
+              Ready for payments
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
+            <CardTitle className="text-sm font-medium">Pending Setup</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.pending_mandates || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Awaiting customer action
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Usage Rate</CardTitle>
             <Shield className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.response_rate?.toFixed(1) || 0}%</div>
-            <p className="text-xs text-muted-foreground">
-              Evidence submitted on time
-            </p>
+            <div className="text-2xl font-bold">{stats?.usage_rate?.toFixed(1) || 0}%</div>
+            <Progress value={stats?.usage_rate} className="mt-2" />
           </CardContent>
         </Card>
       </div>
+
+      {/* Alert for expiring mandates */}
+      {stats?.expiring_soon && stats.expiring_soon > 0 && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Mandates Expiring Soon</AlertTitle>
+          <AlertDescription>
+            You have {stats.expiring_soon} mandate{stats.expiring_soon > 1 ? 's' : ''} expiring within the next 30 days.
+            Consider renewing them to avoid payment disruptions.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Tabs and Filters */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex items-center justify-between">
           <TabsList>
-            <TabsTrigger value="all">
-              All Disputes
-              {disputes && (
+            <TabsTrigger value="all">All Mandates</TabsTrigger>
+            <TabsTrigger value="active">
+              Active
+              {stats?.active_mandates && stats.active_mandates > 0 && (
                 <Badge variant="secondary" className="ml-2">
-                  {disputes.total_count}
+                  {stats.active_mandates}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="action_required">
-              Action Required
-              {stats?.open_disputes && stats.open_disputes > 0 && (
-                <Badge variant="destructive" className="ml-2">
-                  {stats.open_disputes}
+            <TabsTrigger value="pending">
+              Pending
+              {stats?.pending_mandates && stats.pending_mandates > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {stats.pending_mandates}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="won">Won</TabsTrigger>
-            <TabsTrigger value="lost">Lost</TabsTrigger>
+            <TabsTrigger value="revoked">Revoked</TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
+            <div className="relative w-96">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by mandate ID, customer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
             <Button
               variant={showFilters ? 'default' : 'outline'}
               onClick={() => setShowFilters(!showFilters)}
@@ -351,7 +340,7 @@ export default function DisputesPage() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleExport}>
                   <Download className="mr-2 h-4 w-4" />
-                  Export Disputes
+                  Export Mandates
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -359,35 +348,22 @@ export default function DisputesPage() {
         </div>
 
         <TabsContent value={activeTab} className="space-y-4">
-          {/* Search and Filters */}
+          {/* Filters */}
           {showFilters && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Filter Disputes</CardTitle>
+                <CardTitle className="text-base">Filter Mandates</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-4">
                   <div className="space-y-2">
-                    <Label>Search</Label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Dispute ID or Payment ID"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label>Status</Label>
                     <Select
-                      value={filters.dispute_status?.[0] || 'all'}
+                      value={filters.status || 'all'}
                       onValueChange={(value) => 
                         setFilters(prev => ({
                           ...prev,
-                          dispute_status: value === 'all' ? undefined : [value]
+                          status: value === 'all' ? undefined : value
                         }))
                       }
                     >
@@ -406,22 +382,47 @@ export default function DisputesPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Stage</Label>
+                    <Label>Type</Label>
                     <Select
-                      value={filters.dispute_stage?.[0] || 'all'}
+                      value={filters.mandate_type || 'all'}
                       onValueChange={(value) => 
                         setFilters(prev => ({
                           ...prev,
-                          dispute_stage: value === 'all' ? undefined : [value]
+                          mandate_type: value === 'all' ? undefined : value
                         }))
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="All stages" />
+                        <SelectValue placeholder="All types" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All stages</SelectItem>
-                        {Object.entries(STAGE_CONFIG).map(([value, config]) => (
+                        <SelectItem value="all">All types</SelectItem>
+                        {Object.entries(MANDATE_TYPES).map(([value, config]) => (
+                          <SelectItem key={value} value={value}>
+                            {config.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Payment Method</Label>
+                    <Select
+                      value={filters.payment_method_type || 'all'}
+                      onValueChange={(value) => 
+                        setFilters(prev => ({
+                          ...prev,
+                          payment_method_type: value === 'all' ? undefined : value
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All methods" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All methods</SelectItem>
+                        {Object.entries(PAYMENT_METHOD_TYPES).map(([value, config]) => (
                           <SelectItem key={value} value={value}>
                             {config.label}
                           </SelectItem>
@@ -476,19 +477,19 @@ export default function DisputesPage() {
             </Card>
           )}
 
-          {/* Disputes Table */}
+          {/* Mandates Table */}
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Dispute ID</TableHead>
-                      <TableHead>Payment</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Stage</TableHead>
+                      <TableHead>Mandate ID</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Payment Method</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Due By</TableHead>
+                      <TableHead>Usage</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -502,75 +503,82 @@ export default function DisputesPage() {
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : filteredDisputes?.length === 0 ? (
+                    ) : filteredMandates?.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8">
-                          <div className="flex flex-col items-center gap-2">
-                            <Shield className="h-12 w-12 text-muted-foreground/50" />
-                            <p className="text-muted-foreground">No disputes found</p>
-                            <p className="text-sm text-muted-foreground">
-                              Great job! Keep up the good work.
-                            </p>
-                          </div>
+                          <p className="text-muted-foreground">No mandates found</p>
+                          {activeTab === 'all' && (
+                            <Button 
+                              className="mt-4" 
+                              onClick={() => router.push('/mandates/create')}
+                            >
+                              Create Your First Mandate
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredDisputes?.map((dispute) => {
-                        const daysRemaining = getDaysRemaining(dispute.dispute_due_by)
-                        const isUrgent = daysRemaining !== null && daysRemaining <= 2
+                      filteredMandates?.map((mandate) => {
+                        const typeConfig = MANDATE_TYPES[mandate.mandate_type as keyof typeof MANDATE_TYPES]
+                        const methodConfig = PAYMENT_METHOD_TYPES[mandate.payment_method_type as keyof typeof PAYMENT_METHOD_TYPES]
+                        const MethodIcon = methodConfig?.icon || CreditCard
                         
                         return (
-                          <TableRow key={dispute.dispute_id}>
+                          <TableRow key={mandate.mandate_id}>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                                  {dispute.dispute_id}
+                                  {mandate.mandate_id}
                                 </code>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(mandate.mandate_id)}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
                               </div>
                             </TableCell>
                             <TableCell>
                               <div>
-                                <code className="text-xs text-muted-foreground">
-                                  {dispute.payment_id}
-                                </code>
-                                {dispute.connector_dispute_id && (
-                                  <p className="text-xs text-muted-foreground">
-                                    via {dispute.connector}
-                                  </p>
+                                <p className="font-medium">{mandate.customer?.email || mandate.customer_id}</p>
+                                {mandate.customer?.name && (
+                                  <p className="text-xs text-muted-foreground">{mandate.customer.name}</p>
                                 )}
                               </div>
                             </TableCell>
                             <TableCell>
-                              <div className="font-medium">
-                                {formatCurrency(dispute.dispute_amount, dispute.currency)}
-                              </div>
-                            </TableCell>
-                            <TableCell>
                               <Badge variant="outline">
-                                {STAGE_CONFIG[dispute.dispute_stage as keyof typeof STAGE_CONFIG]?.label || dispute.dispute_stage}
+                                {typeConfig?.label || mandate.mandate_type}
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              {getStatusBadge(dispute.dispute_status)}
+                              <div className="flex items-center gap-2">
+                                <MethodIcon className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm">{methodConfig?.label || mandate.payment_method_type}</span>
+                              </div>
                             </TableCell>
                             <TableCell>
-                              {dispute.dispute_due_by ? (
-                                <div className={cn(
-                                  "flex items-center gap-1",
-                                  isUrgent && "text-destructive font-medium"
-                                )}>
-                                  <Clock className="h-3 w-3" />
-                                  {daysRemaining} days
-                                </div>
+                              {getStatusBadge(mandate.mandate_status)}
+                            </TableCell>
+                            <TableCell>
+                              {mandate.mandate_type === 'single_use' ? (
+                                <Badge variant={mandate.usage_count > 0 ? 'secondary' : 'outline'}>
+                                  {mandate.usage_count > 0 ? 'Used' : 'Unused'}
+                                </Badge>
                               ) : (
-                                <span className="text-muted-foreground">-</span>
+                                <div className="text-sm">
+                                  <span className="font-medium">{mandate.usage_count || 0}</span>
+                                  <span className="text-muted-foreground"> payments</span>
+                                </div>
                               )}
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="text-sm">{formatDate(dispute.created_at)}</p>
+                                <p className="text-sm">{formatDate(mandate.created_at)}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {format(new Date(dispute.created_at), 'HH:mm:ss')}
+                                  {format(new Date(mandate.created_at), 'HH:mm:ss')}
                                 </p>
                               </div>
                             </TableCell>
@@ -583,34 +591,37 @@ export default function DisputesPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem
-                                    onClick={() => router.push(`/disputes/${dispute.dispute_id}`)}
+                                    onClick={() => router.push(`/mandates/${mandate.mandate_id}`)}
                                   >
                                     <Eye className="mr-2 h-4 w-4" />
                                     View Details
                                   </DropdownMenuItem>
-                                  {dispute.dispute_status === 'dispute_opened' && (
+                                  {mandate.mandate_status === 'active' && (
                                     <>
                                       <DropdownMenuItem
-                                        onClick={() => router.push(`/disputes/${dispute.dispute_id}/challenge`)}
+                                        onClick={() => router.push(`/payments/create?mandate_id=${mandate.mandate_id}`)}
                                       >
-                                        <MessageSquare className="mr-2 h-4 w-4" />
-                                        Submit Evidence
+                                        <CreditCard className="mr-2 h-4 w-4" />
+                                        Create Payment
                                       </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
                                       <DropdownMenuItem
-                                        onClick={() => handleAcceptDispute(dispute.dispute_id)}
+                                        onClick={() => handleRevokeMandate(mandate.mandate_id)}
                                         className="text-destructive"
                                       >
-                                        <CheckCircle className="mr-2 h-4 w-4" />
-                                        Accept Dispute
+                                        <Ban className="mr-2 h-4 w-4" />
+                                        Revoke Mandate
                                       </DropdownMenuItem>
                                     </>
                                   )}
-                                  <DropdownMenuItem
-                                    onClick={() => router.push(`/payments/${dispute.payment_id}`)}
-                                  >
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    View Payment
-                                  </DropdownMenuItem>
+                                  {mandate.payment_id && (
+                                    <DropdownMenuItem
+                                      onClick={() => router.push(`/payments?mandate_id=${mandate.mandate_id}`)}
+                                    >
+                                      <FileText className="mr-2 h-4 w-4" />
+                                      View Payments
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -624,7 +635,7 @@ export default function DisputesPage() {
             </CardContent>
             <CardFooter className="flex items-center justify-between border-t px-6 py-4">
               <div className="text-sm text-muted-foreground">
-                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, disputes?.total_count || 0)} of {disputes?.total_count || 0} disputes
+                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, mandates?.total_count || 0)} of {mandates?.total_count || 0} mandates
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -638,14 +649,14 @@ export default function DisputesPage() {
                 </Button>
                 <div className="flex items-center gap-1">
                   <span className="text-sm">
-                    Page {currentPage} of {Math.ceil((disputes?.total_count || 0) / pageSize)}
+                    Page {currentPage} of {Math.ceil((mandates?.total_count || 0) / pageSize)}
                   </span>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentPage(prev => prev + 1)}
-                  disabled={currentPage * pageSize >= (disputes?.total_count || 0)}
+                  disabled={currentPage * pageSize >= (mandates?.total_count || 0)}
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />

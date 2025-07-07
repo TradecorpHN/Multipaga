@@ -1,29 +1,31 @@
-// app/(dashboard)/disputes/page.tsx
+// app/(dashboard)/payouts/page.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
-  AlertTriangle,
-  Search,
-  Filter,
+  Send, 
+  Plus, 
+  Search, 
+  Filter, 
   Download,
   RefreshCw,
   MoreHorizontal,
   Eye,
-  MessageSquare,
-  FileText,
+  Copy,
   CheckCircle,
   XCircle,
   Clock,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
+  AlertCircle,
+  ArrowUpRight,
+  Building,
+  CreditCard,
   DollarSign,
-  Shield,
+  TrendingUp,
+  Calendar,
   ChevronLeft,
   ChevronRight,
-  Info
+  ExternalLink
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -65,39 +67,45 @@ import { formatCurrency, formatDate, cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/use-toast'
 import { useDebounce } from '@/hooks/use-debounce'
 
-// Dispute status configurations
+// Payout status configurations
 const STATUS_CONFIG = {
-  dispute_opened: { label: 'Opened', variant: 'destructive' as const, icon: AlertTriangle },
-  dispute_expired: { label: 'Expired', variant: 'secondary' as const, icon: Clock },
-  dispute_accepted: { label: 'Accepted', variant: 'secondary' as const, icon: CheckCircle },
-  dispute_cancelled: { label: 'Cancelled', variant: 'secondary' as const, icon: XCircle },
-  dispute_challenged: { label: 'Challenged', variant: 'warning' as const, icon: MessageSquare },
-  dispute_won: { label: 'Won', variant: 'success' as const, icon: CheckCircle },
-  dispute_lost: { label: 'Lost', variant: 'destructive' as const, icon: XCircle },
+  success: { label: 'Success', variant: 'success' as const, icon: CheckCircle },
+  failed: { label: 'Failed', variant: 'destructive' as const, icon: XCircle },
+  cancelled: { label: 'Cancelled', variant: 'secondary' as const, icon: XCircle },
+  initiated: { label: 'Initiated', variant: 'default' as const, icon: Clock },
+  expired: { label: 'Expired', variant: 'secondary' as const, icon: Clock },
+  reversed: { label: 'Reversed', variant: 'warning' as const, icon: AlertCircle },
+  pending: { label: 'Pending', variant: 'warning' as const, icon: Clock },
+  requires_creation: { label: 'Requires Creation', variant: 'outline' as const, icon: AlertCircle },
+  requires_fulfillment: { label: 'Requires Fulfillment', variant: 'outline' as const, icon: AlertCircle },
+  requires_vendor_account_creation: { label: 'Requires Vendor Setup', variant: 'outline' as const, icon: Building },
 }
 
-// Dispute stage configurations
-const STAGE_CONFIG = {
-  pre_dispute: { label: 'Pre-Dispute', description: 'Initial inquiry from customer' },
-  dispute: { label: 'Dispute', description: 'Formal chargeback initiated' },
-  pre_arbitration: { label: 'Pre-Arbitration', description: 'Second chargeback' },
+// Payout type configurations
+const PAYOUT_TYPES = {
+  bank: { label: 'Bank Transfer', icon: Building },
+  card: { label: 'Card', icon: CreditCard },
+  wallet: { label: 'Digital Wallet', icon: Send },
 }
 
-interface DisputeFilters {
-  dispute_status?: string[]
-  dispute_stage?: string[]
+interface PayoutFilters {
+  payout_status?: string[]
+  payout_type?: string[]
+  currency?: string[]
   amount_gte?: number
   amount_lte?: number
+  customer_id?: string
   created_after?: Date
   created_before?: Date
 }
 
-export default function DisputesPage() {
+export default function PayoutsPage() {
   const router = useRouter()
   const { toast } = useToast()
   
+  const [selectedPayouts, setSelectedPayouts] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
-  const [filters, setFilters] = useState<DisputeFilters>({})
+  const [filters, setFilters] = useState<PayoutFilters>({})
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [activeTab, setActiveTab] = useState('all')
@@ -110,14 +118,17 @@ export default function DisputesPage() {
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
     ...(debouncedSearch && { 
-      dispute_id: debouncedSearch,
-      payment_id: debouncedSearch,
+      payout_id: debouncedSearch,
+      customer_id: debouncedSearch,
     }),
-    ...(filters.dispute_status && filters.dispute_status.length > 0 && { 
-      dispute_status: filters.dispute_status 
+    ...(filters.payout_status && filters.payout_status.length > 0 && { 
+      payout_status: filters.payout_status 
     }),
-    ...(filters.dispute_stage && filters.dispute_stage.length > 0 && { 
-      dispute_stage: filters.dispute_stage 
+    ...(filters.payout_type && filters.payout_type.length > 0 && { 
+      payout_type: filters.payout_type 
+    }),
+    ...(filters.currency && filters.currency.length > 0 && { 
+      currency: filters.currency 
     }),
     ...(filters.amount_gte && { amount: { gte: filters.amount_gte * 100 } }),
     ...(filters.amount_lte && { amount: { lte: filters.amount_lte * 100 } }),
@@ -129,62 +140,77 @@ export default function DisputesPage() {
     }),
   }
 
-  // Fetch disputes
-  const { data: disputes, isLoading, refetch } = trpc.disputes.list.useQuery(queryParams)
+  // Fetch payouts
+  const { data: payouts, isLoading, refetch } = trpc.payouts.list.useQuery(queryParams)
 
-  // Fetch dispute statistics
-  const { data: stats } = trpc.disputes.stats.useQuery({
+  // Fetch payout statistics
+  const { data: stats } = trpc.payouts.stats.useQuery({
     time_range: {
       start_time: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       end_time: new Date().toISOString(),
     }
   })
 
-  // Accept dispute mutation
-  const acceptMutation = trpc.disputes.accept.useMutation({
+  // Cancel payout mutation
+  const cancelMutation = trpc.payouts.cancel.useMutation({
     onSuccess: () => {
       toast({
-        title: 'Dispute Accepted',
-        description: 'The dispute has been accepted and will be processed.',
+        title: 'Payout Cancelled',
+        description: 'The payout has been cancelled successfully.',
       })
       refetch()
     },
     onError: (error) => {
       toast({
-        title: 'Action Failed',
+        title: 'Cancellation Failed',
         description: error.message,
         variant: 'destructive',
       })
     },
   })
 
-  // Challenge dispute mutation
-  const challengeMutation = trpc.disputes.challenge.useMutation({
+  // Fulfill payout mutation
+  const fulfillMutation = trpc.payouts.fulfill.useMutation({
     onSuccess: () => {
       toast({
-        title: 'Evidence Submitted',
-        description: 'Your evidence has been submitted successfully.',
+        title: 'Payout Fulfilled',
+        description: 'The payout has been marked as fulfilled.',
       })
       refetch()
     },
     onError: (error) => {
       toast({
-        title: 'Submission Failed',
+        title: 'Fulfillment Failed',
         description: error.message,
         variant: 'destructive',
       })
     },
   })
 
-  const handleAcceptDispute = (disputeId: string) => {
-    if (confirm('Are you sure you want to accept this dispute? This action cannot be undone.')) {
-      acceptMutation.mutate({ dispute_id: disputeId })
+  const handleCancelPayout = (payoutId: string) => {
+    if (confirm('Are you sure you want to cancel this payout? This action may not be reversible.')) {
+      cancelMutation.mutate({ 
+        payout_id: payoutId,
+        cancellation_reason: 'requested_by_customer',
+      })
     }
+  }
+
+  const handleFulfillPayout = (payoutId: string) => {
+    fulfillMutation.mutate({ payout_id: payoutId })
   }
 
   const handleExport = () => {
     // TODO: Implement export functionality
-    console.log('Exporting disputes...')
+    console.log('Exporting payouts...')
+  }
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast({
+      title: 'Copied to clipboard',
+      description: 'The payout ID has been copied to your clipboard.',
+    })
   }
 
   const getStatusBadge = (status: string) => {
@@ -200,20 +226,12 @@ export default function DisputesPage() {
     )
   }
 
-  const getDaysRemaining = (dueBy?: string) => {
-    if (!dueBy) return null
-    const due = new Date(dueBy)
-    const now = new Date()
-    const days = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-    return days
-  }
-
-  const filteredDisputes = disputes?.data.filter(dispute => {
-    if (activeTab === 'action_required') {
-      return ['dispute_opened', 'dispute_challenged'].includes(dispute.dispute_status)
+  const filteredPayouts = payouts?.data.filter(payout => {
+    if (activeTab === 'pending') {
+      return ['initiated', 'pending', 'requires_fulfillment'].includes(payout.status)
     }
-    if (activeTab === 'won') return dispute.dispute_status === 'dispute_won'
-    if (activeTab === 'lost') return dispute.dispute_status === 'dispute_lost'
+    if (activeTab === 'completed') return payout.status === 'success'
+    if (activeTab === 'failed') return ['failed', 'cancelled', 'expired'].includes(payout.status)
     return true
   })
 
@@ -222,25 +240,29 @@ export default function DisputesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Disputes</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Payouts</h1>
           <p className="text-muted-foreground">
-            Manage chargebacks and disputes
+            Send money to customers, vendors, and partners
           </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="icon" onClick={() => refetch()}>
             <RefreshCw className="h-4 w-4" />
           </Button>
+          <Button onClick={() => router.push('/payouts/create')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Payout
+          </Button>
         </div>
       </div>
 
-      {/* Alert for urgent disputes */}
-      {stats?.disputes_due_soon && stats.disputes_due_soon > 0 && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Action Required</AlertTitle>
+      {/* Check availability */}
+      {stats && !stats.is_available && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Payouts Not Available</AlertTitle>
           <AlertDescription>
-            You have {stats.disputes_due_soon} dispute{stats.disputes_due_soon > 1 ? 's' : ''} due for response within 48 hours.
+            Payouts are not currently available for your account. Please contact support to enable this feature.
           </AlertDescription>
         </Alert>
       )}
@@ -249,55 +271,60 @@ export default function DisputesPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Disputes</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Payouts</CardTitle>
+            <Send className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.total_disputes || 0}</div>
+            <div className="text-2xl font-bold">{stats?.total_payouts || 0}</div>
             <p className="text-xs text-muted-foreground">
-              +{stats?.new_disputes_this_month || 0} this month
+              This month
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.win_rate?.toFixed(1) || 0}%</div>
-            <Progress value={stats?.win_rate} className="mt-2" />
-            <p className="text-xs text-muted-foreground mt-2">
-              {stats?.disputes_won || 0} won, {stats?.disputes_lost || 0} lost
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">At Risk</CardTitle>
-            <DollarSign className="h-4 w-4 text-yellow-600" />
+            <CardTitle className="text-sm font-medium">Total Volume</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(stats?.amount_at_risk || 0, 'USD')}
+              {formatCurrency(stats?.total_amount || 0, stats?.primary_currency || 'USD')}
             </div>
             <p className="text-xs text-muted-foreground">
-              From {stats?.open_disputes || 0} open disputes
+              {stats?.volume_change && stats.volume_change > 0 ? (
+                <span className="text-green-600">
+                  +{stats.volume_change.toFixed(1)}% from last month
+                </span>
+              ) : (
+                <span className="text-red-600">
+                  {stats?.volume_change?.toFixed(1)}% from last month
+                </span>
+              )}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Response Rate</CardTitle>
-            <Shield className="h-4 w-4 text-blue-600" />
+            <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.response_rate?.toFixed(1) || 0}%</div>
+            <div className="text-2xl font-bold">{stats?.success_rate?.toFixed(1) || 0}%</div>
+            <Progress value={stats?.success_rate} className="mt-2" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.pending_payouts || 0}</div>
             <p className="text-xs text-muted-foreground">
-              Evidence submitted on time
+              {formatCurrency(stats?.pending_amount || 0, stats?.primary_currency || 'USD')}
             </p>
           </CardContent>
         </Card>
@@ -307,27 +334,29 @@ export default function DisputesPage() {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex items-center justify-between">
           <TabsList>
-            <TabsTrigger value="all">
-              All Disputes
-              {disputes && (
+            <TabsTrigger value="all">All Payouts</TabsTrigger>
+            <TabsTrigger value="pending">
+              Pending
+              {stats?.pending_payouts && stats.pending_payouts > 0 && (
                 <Badge variant="secondary" className="ml-2">
-                  {disputes.total_count}
+                  {stats.pending_payouts}
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="action_required">
-              Action Required
-              {stats?.open_disputes && stats.open_disputes > 0 && (
-                <Badge variant="destructive" className="ml-2">
-                  {stats.open_disputes}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="won">Won</TabsTrigger>
-            <TabsTrigger value="lost">Lost</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
+            <TabsTrigger value="failed">Failed</TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
+            <div className="relative w-96">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by payout ID, customer..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
             <Button
               variant={showFilters ? 'default' : 'outline'}
               onClick={() => setShowFilters(!showFilters)}
@@ -351,7 +380,7 @@ export default function DisputesPage() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleExport}>
                   <Download className="mr-2 h-4 w-4" />
-                  Export Disputes
+                  Export Payouts
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -359,35 +388,22 @@ export default function DisputesPage() {
         </div>
 
         <TabsContent value={activeTab} className="space-y-4">
-          {/* Search and Filters */}
+          {/* Filters */}
           {showFilters && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Filter Disputes</CardTitle>
+                <CardTitle className="text-base">Filter Payouts</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-4">
                   <div className="space-y-2">
-                    <Label>Search</Label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        placeholder="Dispute ID or Payment ID"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label>Status</Label>
                     <Select
-                      value={filters.dispute_status?.[0] || 'all'}
+                      value={filters.payout_status?.[0] || 'all'}
                       onValueChange={(value) => 
                         setFilters(prev => ({
                           ...prev,
-                          dispute_status: value === 'all' ? undefined : [value]
+                          payout_status: value === 'all' ? undefined : [value]
                         }))
                       }
                     >
@@ -406,26 +422,50 @@ export default function DisputesPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Stage</Label>
+                    <Label>Type</Label>
                     <Select
-                      value={filters.dispute_stage?.[0] || 'all'}
+                      value={filters.payout_type?.[0] || 'all'}
                       onValueChange={(value) => 
                         setFilters(prev => ({
                           ...prev,
-                          dispute_stage: value === 'all' ? undefined : [value]
+                          payout_type: value === 'all' ? undefined : [value]
                         }))
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="All stages" />
+                        <SelectValue placeholder="All types" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All stages</SelectItem>
-                        {Object.entries(STAGE_CONFIG).map(([value, config]) => (
+                        <SelectItem value="all">All types</SelectItem>
+                        {Object.entries(PAYOUT_TYPES).map(([value, config]) => (
                           <SelectItem key={value} value={value}>
                             {config.label}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Currency</Label>
+                    <Select
+                      value={filters.currency?.[0] || 'all'}
+                      onValueChange={(value) => 
+                        setFilters(prev => ({
+                          ...prev,
+                          currency: value === 'all' ? undefined : [value]
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="All currencies" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All currencies</SelectItem>
+                        <SelectItem value="USD">USD</SelectItem>
+                        <SelectItem value="EUR">EUR</SelectItem>
+                        <SelectItem value="GBP">GBP</SelectItem>
+                        <SelectItem value="CAD">CAD</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -476,19 +516,32 @@ export default function DisputesPage() {
             </Card>
           )}
 
-          {/* Disputes Table */}
+          {/* Payouts Table */}
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Dispute ID</TableHead>
-                      <TableHead>Payment</TableHead>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedPayouts.length === filteredPayouts?.length && filteredPayouts?.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPayouts(filteredPayouts?.map(p => p.payout_id) || [])
+                            } else {
+                              setSelectedPayouts([])
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                      </TableHead>
+                      <TableHead>Payout ID</TableHead>
+                      <TableHead>Recipient</TableHead>
                       <TableHead>Amount</TableHead>
-                      <TableHead>Stage</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Due By</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -502,75 +555,83 @@ export default function DisputesPage() {
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : filteredDisputes?.length === 0 ? (
+                    ) : filteredPayouts?.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8">
-                          <div className="flex flex-col items-center gap-2">
-                            <Shield className="h-12 w-12 text-muted-foreground/50" />
-                            <p className="text-muted-foreground">No disputes found</p>
-                            <p className="text-sm text-muted-foreground">
-                              Great job! Keep up the good work.
-                            </p>
-                          </div>
+                          <p className="text-muted-foreground">No payouts found</p>
+                          {activeTab === 'all' && (
+                            <Button 
+                              className="mt-4" 
+                              onClick={() => router.push('/payouts/create')}
+                            >
+                              Create Your First Payout
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredDisputes?.map((dispute) => {
-                        const daysRemaining = getDaysRemaining(dispute.dispute_due_by)
-                        const isUrgent = daysRemaining !== null && daysRemaining <= 2
+                      filteredPayouts?.map((payout) => {
+                        const typeConfig = PAYOUT_TYPES[payout.payout_type as keyof typeof PAYOUT_TYPES]
+                        const TypeIcon = typeConfig?.icon || Send
                         
                         return (
-                          <TableRow key={dispute.dispute_id}>
+                          <TableRow key={payout.payout_id}>
+                            <TableCell>
+                              <input
+                                type="checkbox"
+                                checked={selectedPayouts.includes(payout.payout_id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedPayouts([...selectedPayouts, payout.payout_id])
+                                  } else {
+                                    setSelectedPayouts(selectedPayouts.filter(id => id !== payout.payout_id))
+                                  }
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                            </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                                  {dispute.dispute_id}
+                                  {payout.payout_id}
                                 </code>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => copyToClipboard(payout.payout_id)}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
                               </div>
                             </TableCell>
                             <TableCell>
                               <div>
-                                <code className="text-xs text-muted-foreground">
-                                  {dispute.payment_id}
-                                </code>
-                                {dispute.connector_dispute_id && (
-                                  <p className="text-xs text-muted-foreground">
-                                    via {dispute.connector}
-                                  </p>
+                                <p className="font-medium">{payout.customer?.email || payout.customer_id}</p>
+                                {payout.description && (
+                                  <p className="text-xs text-muted-foreground">{payout.description}</p>
                                 )}
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="font-medium">
-                                {formatCurrency(dispute.dispute_amount, dispute.currency)}
+                                {formatCurrency(payout.amount, payout.currency)}
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">
-                                {STAGE_CONFIG[dispute.dispute_stage as keyof typeof STAGE_CONFIG]?.label || dispute.dispute_stage}
-                              </Badge>
+                              <div className="flex items-center gap-2">
+                                <TypeIcon className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm">{typeConfig?.label || payout.payout_type}</span>
+                              </div>
                             </TableCell>
                             <TableCell>
-                              {getStatusBadge(dispute.dispute_status)}
-                            </TableCell>
-                            <TableCell>
-                              {dispute.dispute_due_by ? (
-                                <div className={cn(
-                                  "flex items-center gap-1",
-                                  isUrgent && "text-destructive font-medium"
-                                )}>
-                                  <Clock className="h-3 w-3" />
-                                  {daysRemaining} days
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">-</span>
-                              )}
+                              {getStatusBadge(payout.status)}
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="text-sm">{formatDate(dispute.created_at)}</p>
+                                <p className="text-sm">{formatDate(payout.created_at)}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {format(new Date(dispute.created_at), 'HH:mm:ss')}
+                                  {format(new Date(payout.created_at), 'HH:mm:ss')}
                                 </p>
                               </div>
                             </TableCell>
@@ -583,34 +644,34 @@ export default function DisputesPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem
-                                    onClick={() => router.push(`/disputes/${dispute.dispute_id}`)}
+                                    onClick={() => router.push(`/payouts/${payout.payout_id}`)}
                                   >
                                     <Eye className="mr-2 h-4 w-4" />
                                     View Details
                                   </DropdownMenuItem>
-                                  {dispute.dispute_status === 'dispute_opened' && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onClick={() => router.push(`/disputes/${dispute.dispute_id}/challenge`)}
-                                      >
-                                        <MessageSquare className="mr-2 h-4 w-4" />
-                                        Submit Evidence
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => handleAcceptDispute(dispute.dispute_id)}
-                                        className="text-destructive"
-                                      >
-                                        <CheckCircle className="mr-2 h-4 w-4" />
-                                        Accept Dispute
-                                      </DropdownMenuItem>
-                                    </>
+                                  {payout.status === 'requires_fulfillment' && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleFulfillPayout(payout.payout_id)}
+                                    >
+                                      <CheckCircle className="mr-2 h-4 w-4" />
+                                      Mark as Fulfilled
+                                    </DropdownMenuItem>
                                   )}
-                                  <DropdownMenuItem
-                                    onClick={() => router.push(`/payments/${dispute.payment_id}`)}
-                                  >
-                                    <FileText className="mr-2 h-4 w-4" />
-                                    View Payment
-                                  </DropdownMenuItem>
+                                  {['initiated', 'pending'].includes(payout.status) && (
+                                    <DropdownMenuItem
+                                      onClick={() => handleCancelPayout(payout.payout_id)}
+                                      className="text-destructive"
+                                    >
+                                      <XCircle className="mr-2 h-4 w-4" />
+                                      Cancel Payout
+                                    </DropdownMenuItem>
+                                  )}
+                                  {payout.connector_payout_id && (
+                                    <DropdownMenuItem>
+                                      <ExternalLink className="mr-2 h-4 w-4" />
+                                      View in {payout.connector}
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -624,7 +685,7 @@ export default function DisputesPage() {
             </CardContent>
             <CardFooter className="flex items-center justify-between border-t px-6 py-4">
               <div className="text-sm text-muted-foreground">
-                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, disputes?.total_count || 0)} of {disputes?.total_count || 0} disputes
+                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, payouts?.total_count || 0)} of {payouts?.total_count || 0} payouts
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -638,14 +699,14 @@ export default function DisputesPage() {
                 </Button>
                 <div className="flex items-center gap-1">
                   <span className="text-sm">
-                    Page {currentPage} of {Math.ceil((disputes?.total_count || 0) / pageSize)}
+                    Page {currentPage} of {Math.ceil((payouts?.total_count || 0) / pageSize)}
                   </span>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentPage(prev => prev + 1)}
-                  disabled={currentPage * pageSize >= (disputes?.total_count || 0)}
+                  disabled={currentPage * pageSize >= (payouts?.total_count || 0)}
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />

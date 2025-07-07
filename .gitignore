@@ -1,0 +1,51 @@
+# Ignorar la carpeta node_modules del proyecto
+/node_modules/
+
+# Directorios de dependencias
+.pnpm-store/
+.vscode-test/
+
+# Salida de build de Next.js
+.next/
+out/
+dist/
+build/
+
+# Archivos de entorno (mantener el ejemplo)
+/.env*
+!.env.example
+
+# Registros de logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# Datos de runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Cobertura de tests
+coverage/
+nyc_output/
+
+# Archivos específicos del SO
+.DS_Store
+Thumbs.db
+
+# Configuración de editores
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Información de compilación de TypeScript
+*.tsbuildinfo
+
+# Cachés y archivos temporales
+.cache/

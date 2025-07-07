@@ -1,327 +1,482 @@
+// app/(dashboard)/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { useAuth } from '@/presentation/contexts/AuthContext'
-import { hyperswitchClient } from '@/infrastructure/api/HyperswitchClient'
-import {
-  Activity,
-  CreditCard,
-  RefreshCw,
-  AlertTriangle,
+import { useState } from 'react'
+import { 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  DollarSign, 
+  CreditCard, 
   TrendingUp,
-  DollarSign,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Loader2,
+  Users,
+  Activity,
+  AlertCircle,
+  RefreshCw,
+  Download,
+  Calendar,
+  MoreHorizontal
 } from 'lucide-react'
-import { format } from 'date-fns'
-import toast from 'react-hot-toast'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Progress } from '@/components/ui/progress'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts'
+import { trpc } from '@/utils/trpc'
+import { formatCurrency, formatDate } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth.store'
+import { format, subDays, startOfMonth, endOfMonth } from 'date-fns'
 
-// Dashboard stats interface
-interface DashboardStats {
-  totalPayments: number
-  successfulPayments: number
-  pendingPayments: number
-  failedPayments: number
-  totalRefunds: number
-  activeDisputes: number
-  totalVolume: string
-  successRate: number
-}
-
-// Stats card component
-function StatsCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  trend, 
-  color = 'purple' 
-}: {
-  title: string
-  value: string | number
-  icon: any
-  trend?: string
-  color?: 'purple' | 'green' | 'yellow' | 'red' | 'blue'
-}) {
-  const colorClasses = {
-    purple: 'from-purple-600 to-pink-600 text-purple-400 border-purple-500/30',
-    green: 'from-green-600 to-emerald-600 text-green-400 border-green-500/30',
-    yellow: 'from-yellow-600 to-orange-600 text-yellow-400 border-yellow-500/30',
-    red: 'from-red-600 to-rose-600 text-red-400 border-red-500/30',
-    blue: 'from-blue-600 to-cyan-600 text-blue-400 border-blue-500/30',
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="neumorphic-card p-6"
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-dark-text-secondary text-sm mb-1">{title}</p>
-          <p className="text-2xl font-bold text-white mb-2">{value}</p>
-          {trend && (
-            <div className="flex items-center space-x-1">
-              <TrendingUp className={`w-4 h-4 ${colorClasses[color].split(' ')[2]}`} />
-              <span className={`text-sm ${colorClasses[color].split(' ')[2]}`}>{trend}</span>
-            </div>
-          )}
-        </div>
-        <div className={`p-3 rounded-lg bg-gradient-to-br ${colorClasses[color].split(' ').slice(0, 2).join(' ')} bg-opacity-10 border ${colorClasses[color].split(' ')[3]}`}>
-          <Icon className="w-6 h-6 text-white" />
-        </div>
-      </div>
-    </motion.div>
-  )
+// Chart colors
+const COLORS = {
+  primary: '#8b5cf6',
+  success: '#10b981',
+  warning: '#f59e0b',
+  danger: '#ef4444',
+  info: '#3b82f6',
 }
 
 export default function DashboardPage() {
-  const { authState } = useAuth()
-  const [stats, setStats] = useState<DashboardStats | null>(null)
-  const [recentActivity, setRecentActivity] = useState<any[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const user = useAuthStore((state) => state.user)
+  const [timeRange, setTimeRange] = useState('7d')
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  useEffect(() => {
-    fetchDashboardData()
-  }, [])
+  // Calculate date range
+  const getDateRange = () => {
+    const end = new Date()
+    let start: Date
 
-  const fetchDashboardData = async () => {
-    try {
-      setIsLoading(true)
-
-      // Fetch payments list to calculate stats
-      const paymentsResponse = await hyperswitchClient.post('/payments/list', {
-        limit: 100,
-        offset: 0,
-      })
-
-      const payments = (paymentsResponse as any).data || []
-      
-      // Calculate stats from payments
-      const totalPayments = payments.length
-      const successfulPayments = payments.filter((p: any) => p.status === 'succeeded').length
-      const pendingPayments = payments.filter((p: any) => ['processing', 'requires_payment_method', 'requires_confirmation'].includes(p.status)).length
-      const failedPayments = payments.filter((p: any) => p.status === 'failed').length
-      
-      const totalVolume = payments
-        .filter((p: any) => p.status === 'succeeded')
-        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0)
-
-      const successRate = totalPayments > 0 ? (successfulPayments / totalPayments) * 100 : 0
-
-      // Mock data for refunds and disputes (since we don't have the endpoints yet)
-      const mockStats: DashboardStats = {
-        totalPayments,
-        successfulPayments,
-        pendingPayments,
-        failedPayments,
-        totalRefunds: 0,
-        activeDisputes: 0,
-        totalVolume: `$${(totalVolume / 100).toFixed(2)}`,
-        successRate: Math.round(successRate),
-      }
-
-      setStats(mockStats)
-      
-      // Set recent activity (last 5 payments)
-      setRecentActivity(payments.slice(0, 5))
-
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error)
-      toast.error('Failed to load dashboard data')
-      
-      // Set mock data on error
-      setStats({
-        totalPayments: 0,
-        successfulPayments: 0,
-        pendingPayments: 0,
-        failedPayments: 0,
-        totalRefunds: 0,
-        activeDisputes: 0,
-        totalVolume: '$0.00',
-        successRate: 0,
-      })
-    } finally {
-      setIsLoading(false)
+    switch (timeRange) {
+      case '24h':
+        start = subDays(end, 1)
+        break
+      case '7d':
+        start = subDays(end, 7)
+        break
+      case '30d':
+        start = subDays(end, 30)
+        break
+      case 'mtd':
+        start = startOfMonth(end)
+        break
+      default:
+        start = subDays(end, 7)
     }
+
+    return { start, end }
   }
 
-  if (isLoading) {
+  const { start, end } = getDateRange()
+
+  // Fetch data
+  const { data: stats, isLoading: loadingStats } = trpc.dashboard.stats.useQuery(
+    {
+      time_range: {
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+      },
+    },
+    {
+      refetchInterval: 30000, // Refresh every 30 seconds
+    }
+  )
+
+  const { data: recentPayments, isLoading: loadingPayments } = trpc.payments.list.useQuery({
+    limit: 5,
+    created: {
+      gte: start.toISOString(),
+      lte: end.toISOString(),
+    },
+  })
+
+  const { data: recentRefunds } = trpc.refunds.list.useQuery({
+    limit: 5,
+    created: {
+      gte: start.toISOString(),
+      lte: end.toISOString(),
+    },
+  })
+
+  const { data: connectors } = trpc.connectors.list.useQuery({})
+
+  // Process chart data
+  const chartData = stats?.daily_volume?.map((item) => ({
+    date: format(new Date(item.date), 'MMM dd'),
+    volume: item.amount / 100,
+    count: item.count,
+  })) || []
+
+  const paymentMethodData = Object.entries(stats?.payment_methods || {}).map(([method, data]: [string, any]) => ({
+    name: method,
+    value: data.count,
+    amount: data.amount / 100,
+  }))
+
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1)
+  }
+
+  const handleExport = () => {
+    // TODO: Implement export functionality
+    console.log('Exporting dashboard data...')
+  }
+
+  if (loadingStats) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+      <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-7 w-32" />
+                <Skeleton className="mt-1 h-3 w-20" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Header */}
-      <div>
-        <h2 className="text-3xl font-bold mb-2">
-          Welcome back, {authState?.profileName || 'Merchant'}
-        </h2>
-        <p className="text-dark-text-secondary">
-          Here's what's happening with your payments today.
-        </p>
+    <div className="flex-1 space-y-4 p-8 pt-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">
+            Welcome back, {user?.company_name}
+          </h2>
+          <p className="text-muted-foreground">
+            Here's what's happening with your payments today.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-[140px]">
+              <Calendar className="mr-2 h-4 w-4" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="24h">Last 24 hours</SelectItem>
+              <SelectItem value="7d">Last 7 days</SelectItem>
+              <SelectItem value="30d">Last 30 days</SelectItem>
+              <SelectItem value="mtd">Month to date</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="icon" onClick={handleRefresh}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExport}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Data
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatsCard
-          title="Total Volume"
-          value={stats?.totalVolume || '$0.00'}
-          icon={DollarSign}
-          color="purple"
-        />
-        <StatsCard
-          title="Success Rate"
-          value={`${stats?.successRate || 0}%`}
-          icon={Activity}
-          trend="+2.5%"
-          color="green"
-        />
-        <StatsCard
-          title="Pending Payments"
-          value={stats?.pendingPayments || 0}
-          icon={Clock}
-          color="yellow"
-        />
-        <StatsCard
-          title="Active Disputes"
-          value={stats?.activeDisputes || 0}
-          icon={AlertTriangle}
-          color="red"
-        />
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats?.total_volume || 0, stats?.primary_currency || 'USD')}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.volume_change && stats.volume_change > 0 ? (
+                <span className="flex items-center text-green-600">
+                  <ArrowUpRight className="mr-1 h-3 w-3" />
+                  +{stats.volume_change.toFixed(1)}% from last period
+                </span>
+              ) : (
+                <span className="flex items-center text-red-600">
+                  <ArrowDownRight className="mr-1 h-3 w-3" />
+                  {stats?.volume_change?.toFixed(1)}% from last period
+                </span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.success_rate?.toFixed(1)}%</div>
+            <Progress value={stats?.success_rate} className="mt-2" />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {stats?.successful_payments || 0} of {stats?.total_payments || 0} payments
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.active_customers || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats?.new_customers || 0} new this period
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Avg. Transaction</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats?.average_ticket_size || 0, stats?.primary_currency || 'USD')}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Per successful payment
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Payment Status Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Payment Distribution */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="neumorphic-card p-6"
-        >
-          <h3 className="text-lg font-semibold mb-4">Payment Distribution</h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <CheckCircle className="w-5 h-5 text-green-400" />
-                <span className="text-dark-text-secondary">Successful</span>
-              </div>
-              <span className="font-semibold">{stats?.successfulPayments || 0}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Clock className="w-5 h-5 text-yellow-400" />
-                <span className="text-dark-text-secondary">Pending</span>
-              </div>
-              <span className="font-semibold">{stats?.pendingPayments || 0}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <XCircle className="w-5 h-5 text-red-400" />
-                <span className="text-dark-text-secondary">Failed</span>
-              </div>
-              <span className="font-semibold">{stats?.failedPayments || 0}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <RefreshCw className="w-5 h-5 text-blue-400" />
-                <span className="text-dark-text-secondary">Refunded</span>
-              </div>
-              <span className="font-semibold">{stats?.totalRefunds || 0}</span>
-            </div>
-          </div>
-        </motion.div>
+      {/* Charts */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <Card className="col-span-4">
+          <CardHeader>
+            <CardTitle>Revenue Overview</CardTitle>
+            <CardDescription>
+              Daily transaction volume for the selected period
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pl-2">
+            <ResponsiveContainer width="100%" height={350}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8}/>
+                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis 
+                  dataKey="date" 
+                  className="text-xs"
+                  tick={{ fill: 'currentColor' }}
+                />
+                <YAxis 
+                  className="text-xs"
+                  tick={{ fill: 'currentColor' }}
+                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--background))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '6px',
+                  }}
+                  formatter={(value: any) => [`$${value.toFixed(2)}`, 'Volume']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="volume"
+                  stroke={COLORS.primary}
+                  fillOpacity={1}
+                  fill="url(#colorVolume)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
-        {/* Recent Activity */}
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="neumorphic-card p-6"
-        >
-          <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
-          <div className="space-y-3">
-            {recentActivity.length > 0 ? (
-              recentActivity.map((payment, index) => (
-                <div key={payment.payment_id} className="flex items-center justify-between py-2">
+        <Card className="col-span-3">
+          <CardHeader>
+            <CardTitle>Payment Methods</CardTitle>
+            <CardDescription>
+              Distribution by payment method
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={350}>
+              <PieChart>
+                <Pie
+                  data={paymentMethodData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {paymentMethodData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={Object.values(COLORS)[index % Object.values(COLORS).length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Recent Payments</CardTitle>
+            <Button variant="ghost" size="sm" asChild>
+              <a href="/payments">
+                View all
+                <ArrowUpRight className="ml-1 h-4 w-4" />
+              </a>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentPayments?.data.slice(0, 5).map((payment) => (
+                <div key={payment.payment_id} className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <CreditCard className="w-4 h-4 text-dark-text-muted" />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10">
+                      <CreditCard className="h-4 w-4 text-primary" />
+                    </div>
                     <div>
-                      <p className="text-sm font-medium">{payment.payment_id}</p>
-                      <p className="text-xs text-dark-text-muted">
-                        {payment.created_at ? format(new Date(payment.created_at), 'MMM dd, HH:mm') : 'N/A'}
+                      <p className="text-sm font-medium">{payment.customer_id || 'Guest'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(payment.created_at)}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium">
-                      ${((payment.amount || 0) / 100).toFixed(2)}
+                      {formatCurrency(payment.amount, payment.currency)}
                     </p>
-                    <p className={`text-xs ${
-                      payment.status === 'succeeded' ? 'text-green-400' :
-                      payment.status === 'failed' ? 'text-red-400' :
-                      'text-yellow-400'
-                    }`}>
+                    <Badge variant={payment.status === 'succeeded' ? 'success' : 'secondary'} className="text-xs">
                       {payment.status}
-                    </p>
+                    </Badge>
                   </div>
                 </div>
-              ))
-            ) : (
-              <p className="text-dark-text-secondary text-sm text-center py-4">
-                No recent activity
-              </p>
-            )}
-          </div>
-        </motion.div>
+              ))}
+              {(!recentPayments || recentPayments.data.length === 0) && (
+                <p className="text-center text-sm text-muted-foreground">
+                  No recent payments
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Connector Status</CardTitle>
+            <Button variant="ghost" size="sm" asChild>
+              <a href="/connectors">
+                Manage
+                <ArrowUpRight className="ml-1 h-4 w-4" />
+              </a>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {connectors?.data.slice(0, 5).map((connector) => (
+                <div key={connector.merchant_connector_id} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-background border">
+                      {CONNECTOR_LOGOS[connector.connector_name.toLowerCase()] || '🔌'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{connector.connector_label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {connector.connector_type}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={connector.status === 'active' ? 'success' : 'secondary'}>
+                    {connector.status}
+                  </Badge>
+                </div>
+              ))}
+              {(!connectors || connectors.data.length === 0) && (
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    No connectors configured
+                  </p>
+                  <Button size="sm" asChild>
+                    <a href="/connectors">Add Connector</a>
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="neumorphic-card p-6"
-      >
-        <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <motion.a
-            href="/payments/create"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="p-4 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-lg text-center hover:shadow-glow transition-all"
-          >
-            <CreditCard className="w-6 h-6 text-purple-400 mx-auto mb-2" />
-            <span className="text-sm font-medium">Create Payment</span>
-          </motion.a>
-          
-          <motion.a
-            href="/refunds/create"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="p-4 bg-gradient-to-r from-blue-600/20 to-cyan-600/20 border border-blue-500/30 rounded-lg text-center hover:shadow-glow transition-all"
-          >
-            <RefreshCw className="w-6 h-6 text-blue-400 mx-auto mb-2" />
-            <span className="text-sm font-medium">Process Refund</span>
-          </motion.a>
-          
-          <motion.a
-            href="/disputes"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="p-4 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/30 rounded-lg text-center hover:shadow-glow transition-all"
-          >
-            <AlertTriangle className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-            <span className="text-sm font-medium">View Disputes</span>
-          </motion.a>
-        </div>
-      </motion.div>
+      {/* Alerts */}
+      {stats?.pending_refunds && stats.pending_refunds > 0 && (
+        <Card className="border-warning">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-warning" />
+              <CardTitle className="text-base">Action Required</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              You have {stats.pending_refunds} pending refunds that require your attention.
+            </p>
+            <Button size="sm" className="mt-3" asChild>
+              <a href="/refunds?status=pending">Review Refunds</a>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
