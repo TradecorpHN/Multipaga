@@ -1,75 +1,135 @@
-// app/api/health/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/presentation/lib/env-config'
 
-export async function GET(request: NextRequest) {
+interface HealthStatus {
+  status: 'healthy' | 'degraded' | 'unhealthy'
+  timestamp: string
+  version: string
+  environment: string
+  checks: {
+    api: {
+      status: 'pass' | 'fail'
+      responseTime?: number
+      error?: string
+    }
+    hyperswitch: {
+      status: 'pass' | 'fail'
+      responseTime?: number
+      error?: string
+    }
+    database?: {
+      status: 'pass' | 'fail'
+      responseTime?: number
+      error?: string
+    }
+  }
+}
+
+// Check Hyperswitch API connectivity
+async function checkHyperswitchAPI(): Promise<{
+  status: 'pass' | 'fail'
+  responseTime?: number
+  error?: string
+}> {
+  const startTime = Date.now()
+  
   try {
-    // Check Hyperswitch API connectivity
-    let hyperswitchStatus = 'unknown'
-    let hyperswitchLatency = 0
-    
-    try {
-      const startTime = Date.now()
-      const response = await fetch(`${env.HYPERSWITCH_BASE_URL}/health`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(5000), // 5 second timeout
-      })
-      
-      hyperswitchLatency = Date.now() - startTime
-      hyperswitchStatus = response.ok ? 'healthy' : 'unhealthy'
-    } catch (error) {
-      hyperswitchStatus = 'unreachable'
-    }
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
 
-    const healthData = {
-      status: hyperswitchStatus === 'healthy' ? 'healthy' : 'degraded',
-      timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version || '1.0.0',
-      environment: env.NODE_ENV,
-      services: {
-        api: {
-          status: 'healthy',
-          uptime: process.uptime(),
-        },
-        hyperswitch: {
-          status: hyperswitchStatus,
-          latency: hyperswitchLatency,
-          baseUrl: env.HYPERSWITCH_BASE_URL,
-        },
-      },
-      system: {
-        memory: {
-          used: process.memoryUsage().heapUsed,
-          total: process.memoryUsage().heapTotal,
-        },
-        node: {
-          version: process.version,
-        },
-      },
-    }
-
-    return NextResponse.json(healthData, {
-      status: healthData.status === 'healthy' ? 200 : 503,
+    const response = await fetch(`${env.HYPERSWITCH_BASE_URL}/health`, {
+      method: 'GET',
       headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Authorization': `Bearer ${env.HYPERSWITCH_API_KEY}`,
+        'Accept': 'application/json',
+      },
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+    const responseTime = Date.now() - startTime
+
+    if (response.ok) {
+      return {
+        status: 'pass',
+        responseTime,
+      }
+    } else {
+      return {
+        status: 'fail',
+        responseTime,
+        error: `HTTP ${response.status}: ${response.statusText}`,
+      }
+    }
+  } catch (error) {
+    return {
+      status: 'fail',
+      responseTime: Date.now() - startTime,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const startTime = Date.now()
+
+  // Perform health checks
+  const hyperswitchCheck = await checkHyperswitchAPI()
+
+  // Determine overall health status
+  const isHealthy = hyperswitchCheck.status === 'pass'
+  const status: HealthStatus['status'] = isHealthy ? 'healthy' : 'unhealthy'
+
+  const healthStatus: HealthStatus = {
+    status,
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    checks: {
+      api: {
+        status: 'pass',
+        responseTime: Date.now() - startTime,
+      },
+      hyperswitch: hyperswitchCheck,
+    },
+  }
+
+  // Return appropriate status code
+  const statusCode = isHealthy ? 200 : 503
+
+  return NextResponse.json(healthStatus, {
+    status: statusCode,
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'X-Health-Check-Version': '1.0',
+    },
+  })
+}
+
+// Simple HEAD request support for monitoring tools
+export async function HEAD(request: NextRequest) {
+  // Quick check without detailed diagnostics
+  try {
+    const response = await fetch(`${env.HYPERSWITCH_BASE_URL}/health`, {
+      method: 'HEAD',
+      headers: {
+        'Authorization': `Bearer ${env.HYPERSWITCH_API_KEY}`,
+      },
+      signal: AbortSignal.timeout(3000),
+    })
+
+    return new NextResponse(null, {
+      status: response.ok ? 200 : 503,
+      headers: {
+        'X-Health-Status': response.ok ? 'healthy' : 'unhealthy',
       },
     })
-  } catch (error) {
-    return NextResponse.json(
-      {
-        status: 'error',
-        timestamp: new Date().toISOString(),
-        error: 'Internal health check failed',
+  } catch {
+    return new NextResponse(null, {
+      status: 503,
+      headers: {
+        'X-Health-Status': 'unhealthy',
       },
-      {
-        status: 500,
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
-      }
-    )
+    })
   }
 }

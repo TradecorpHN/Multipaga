@@ -1,12 +1,10 @@
-// app/error.tsx
 'use client'
 
 import { useEffect } from 'react'
-import { AlertCircle, RefreshCw, Home, Mail } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import * as Sentry from '@sentry/nextjs'
+import { AlertCircle, RefreshCw, Home, ArrowLeft } from 'lucide-react'
+import { Button } from '@/presentation/components/ui/Button'
+import { Card } from '@/presentation/components/ui/Card'
+import { useRouter } from 'next/navigation'
 
 export default function Error({
   error,
@@ -15,62 +13,110 @@ export default function Error({
   error: Error & { digest?: string }
   reset: () => void
 }) {
+  const router = useRouter()
+
   useEffect(() => {
-    // Log the error to Sentry
-    Sentry.captureException(error)
+    // Log error to monitoring service
+    console.error('Application error:', error)
+    
+    // Send to Sentry if configured
+    if (typeof window !== 'undefined' && window.Sentry) {
+      window.Sentry.captureException(error)
+    }
   }, [error])
 
+  const getErrorMessage = () => {
+    // Handle specific error types
+    if (error.message.includes('UNAUTHORIZED')) {
+      return 'Your session has expired. Please log in again.'
+    }
+    if (error.message.includes('NETWORK_ERROR')) {
+      return 'Unable to connect to our servers. Please check your internet connection.'
+    }
+    if (error.message.includes('RATE_LIMIT')) {
+      return 'Too many requests. Please wait a moment and try again.'
+    }
+    
+    // Default message for production
+    if (process.env.NODE_ENV === 'production') {
+      return 'An unexpected error occurred. Our team has been notified.'
+    }
+    
+    // Show actual error in development
+    return error.message || 'An unexpected error occurred'
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
-            <AlertCircle className="h-10 w-10 text-destructive" />
+    <div className="min-h-screen bg-dark-bg flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5" />
+      
+      <Card className="max-w-md w-full relative z-10">
+        <div className="p-8 text-center space-y-6">
+          {/* Error Icon */}
+          <div className="mx-auto w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center">
+            <AlertCircle className="w-10 h-10 text-red-500" />
           </div>
-          <CardTitle className="text-2xl">Something went wrong!</CardTitle>
-          <CardDescription>
-            An unexpected error occurred while processing your request.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error Details</AlertTitle>
-            <AlertDescription className="mt-2 font-mono text-xs">
-              {error.message || 'An unknown error occurred'}
-              {error.digest && (
-                <div className="mt-1 text-muted-foreground">
-                  Error ID: {error.digest}
-                </div>
-              )}
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-2">
-          <div className="flex w-full gap-2">
-            <Button onClick={reset} className="flex-1" variant="default">
-              <RefreshCw className="mr-2 h-4 w-4" />
+
+          {/* Error Title */}
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-dark-text-primary">
+              Something went wrong
+            </h1>
+            <p className="text-dark-text-secondary">
+              {getErrorMessage()}
+            </p>
+          </div>
+
+          {/* Error Details (Development only) */}
+          {process.env.NODE_ENV === 'development' && error.stack && (
+            <details className="text-left">
+              <summary className="cursor-pointer text-sm text-dark-text-muted hover:text-dark-text-secondary transition-colors">
+                Show error details
+              </summary>
+              <pre className="mt-4 p-4 bg-dark-surface rounded-lg text-xs overflow-auto max-h-48 text-dark-text-muted">
+                {error.stack}
+              </pre>
+            </details>
+          )}
+
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button
+              onClick={reset}
+              variant="primary"
+              leftIcon={<RefreshCw className="w-4 h-4" />}
+            >
               Try Again
             </Button>
-            <Button 
-              onClick={() => window.location.href = '/dashboard'} 
-              className="flex-1" 
-              variant="outline"
+            
+            <Button
+              onClick={() => router.back()}
+              variant="secondary"
+              leftIcon={<ArrowLeft className="w-4 h-4" />}
             >
-              <Home className="mr-2 h-4 w-4" />
-              Go Home
+              Go Back
+            </Button>
+            
+            <Button
+              onClick={() => router.push('/dashboard')}
+              variant="ghost"
+              leftIcon={<Home className="w-4 h-4" />}
+            >
+              Dashboard
             </Button>
           </div>
-          <p className="text-center text-xs text-muted-foreground">
+
+          {/* Support Link */}
+          <p className="text-sm text-dark-text-muted">
             If this problem persists, please{' '}
             <a 
               href="mailto:support@multipaga.com" 
-              className="text-primary underline hover:no-underline"
+              className="text-purple-400 hover:text-purple-300 underline transition-colors"
             >
-              <Mail className="inline h-3 w-3" /> contact support
+              contact support
             </a>
           </p>
-        </CardFooter>
+        </div>
       </Card>
     </div>
   )

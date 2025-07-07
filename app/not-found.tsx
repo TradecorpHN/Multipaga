@@ -1,81 +1,105 @@
-// app/not-found.tsx
 import Link from 'next/link'
-import { FileQuestion, Home, ArrowLeft, Search } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { Home, Search, ArrowLeft, Navigation } from 'lucide-react'
+import { Button } from '@/presentation/components/ui/Button'
+import { Card } from '@/presentation/components/ui/Card'
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-md border-2">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-muted">
-            <FileQuestion className="h-12 w-12 text-muted-foreground" />
+    <div className="min-h-screen bg-dark-bg flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-blue-500/5" />
+      
+      <Card className="max-w-md w-full relative z-10">
+        <div className="p-8 text-center space-y-6">
+          {/* 404 Icon */}
+          <div className="mx-auto w-32 h-32 relative">
+            <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-xl animate-pulse" />
+            <div className="relative w-full h-full bg-dark-surface rounded-full flex items-center justify-center">
+              <Navigation className="w-16 h-16 text-purple-400 transform rotate-45" />
+            </div>
           </div>
-          <CardTitle className="text-3xl font-bold">404</CardTitle>
-          <CardDescription className="text-lg">
-            Page not found
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-center text-muted-foreground">
-            The page you're looking for doesn't exist or has been moved.
-          </p>
-          <div className="flex items-center space-x-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search for a page..." 
-              className="flex-1"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const query = e.currentTarget.value
-                  window.location.href = `/search?q=${encodeURIComponent(query)}`
-                }
-              }}
-            />
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-2">
-          <div className="flex w-full gap-2">
-            <Button asChild variant="default" className="flex-1">
-              <Link href="/dashboard">
-                <Home className="mr-2 h-4 w-4" />
-                Dashboard
-              </Link>
-            </Button>
-            <Button 
-              onClick={() => window.history.back()} 
-              variant="outline" 
-              className="flex-1"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Go Back
-            </Button>
-          </div>
-          <div className="mt-4 text-center">
-            <p className="text-xs text-muted-foreground">
-              Quick links:
+
+          {/* Error Message */}
+          <div className="space-y-2">
+            <h1 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+              404
+            </h1>
+            <h2 className="text-2xl font-semibold text-dark-text-primary">
+              Page Not Found
+            </h2>
+            <p className="text-dark-text-secondary">
+              The page you&apos;re looking for doesn&apos;t exist or has been moved.
             </p>
-            <div className="mt-2 flex flex-wrap justify-center gap-2 text-xs">
-              <Link href="/payments" className="text-primary hover:underline">
-                Payments
+          </div>
+
+          {/* Helpful Links */}
+          <div className="bg-dark-surface/50 rounded-lg p-4 space-y-2">
+            <p className="text-sm font-medium text-dark-text-primary mb-3">
+              You might be looking for:
+            </p>
+            <div className="space-y-2 text-left">
+              <Link
+                href="/dashboard"
+                className="block text-sm text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                → Dashboard Overview
               </Link>
-              <span className="text-muted-foreground">•</span>
-              <Link href="/refunds" className="text-primary hover:underline">
-                Refunds
+              <Link
+                href="/payments"
+                className="block text-sm text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                → Payment Management
               </Link>
-              <span className="text-muted-foreground">•</span>
-              <Link href="/connectors" className="text-primary hover:underline">
-                Connectors
+              <Link
+                href="/connectors"
+                className="block text-sm text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                → Payment Connectors
               </Link>
-              <span className="text-muted-foreground">•</span>
-              <Link href="/settings" className="text-primary hover:underline">
-                Settings
+              <Link
+                href="/settings"
+                className="block text-sm text-purple-400 hover:text-purple-300 transition-colors"
+              >
+                → Account Settings
               </Link>
             </div>
           </div>
-        </CardFooter>
+
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link href="/dashboard">
+              <Button
+                variant="primary"
+                leftIcon={<Home className="w-4 h-4" />}
+              >
+                Go to Dashboard
+              </Button>
+            </Link>
+            
+            <Button
+              onClick={() => window.history.back()}
+              variant="secondary"
+              leftIcon={<ArrowLeft className="w-4 h-4" />}
+            >
+              Go Back
+            </Button>
+          </div>
+
+          {/* Search Suggestion */}
+          <div className="pt-4 border-t border-dark-border">
+            <p className="text-sm text-dark-text-muted mb-3">
+              Can&apos;t find what you&apos;re looking for?
+            </p>
+            <Link href="/search">
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<Search className="w-4 h-4" />}
+              >
+                Search Documentation
+              </Button>
+            </Link>
+          </div>
+        </div>
       </Card>
     </div>
   )
