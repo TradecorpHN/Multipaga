@@ -1,219 +1,261 @@
 import { z } from 'zod'
+import { AddressSchema } from './Address'
+import { CustomerSchema } from './Customer'
+import { RefundResponseSchema } from './Refund'
+import { DisputeResponseSchema } from './Dispute'
 
-// Payment Status Enum
+// Payment status enum
 export enum PaymentStatus {
-  CREATED = 'created',
-  PROCESSING = 'processing',
-  REQUIRES_PAYMENT_METHOD = 'requires_payment_method',
-  REQUIRES_CONFIRMATION = 'requires_confirmation',
-  REQUIRES_ACTION = 'requires_action',
-  CANCELLED = 'cancelled',
-  PROCESSING_PAYMENT = 'processing_payment',
-  REQUIRES_CAPTURE = 'requires_capture',
   SUCCEEDED = 'succeeded',
   FAILED = 'failed',
-  VOIDED = 'voided',
-  CAPTURE_INITIATED = 'capture_initiated',
-  CAPTURE_FAILED = 'capture_failed',
-  PARTIALLY_CAPTURED = 'partially_captured',
+  CANCELLED = 'cancelled',
+  PROCESSING = 'processing',
+  REQUIRES_ACTION = 'requires_action',
+  REQUIRES_CONFIRMATION = 'requires_confirmation',
+  REQUIRES_PAYMENT_METHOD = 'requires_payment_method',
+  REQUIRES_CAPTURE = 'requires_capture',
 }
 
-// Payment Method Type Enum
-export enum PaymentMethodType {
-  CARD = 'card',
-  BANK_TRANSFER = 'bank_transfer',
-  WALLET = 'wallet',
-  PAY_LATER = 'pay_later',
-  BANK_REDIRECT = 'bank_redirect',
-  CRYPTO = 'crypto',
-  BANK_DEBIT = 'bank_debit',
-  REWARD = 'reward',
-  REAL_TIME_PAYMENT = 'real_time_payment',
-  UPI = 'upi',
-  VOUCHER = 'voucher',
-  GIFT_CARD = 'gift_card',
-  CARD_REDIRECT = 'card_redirect',
-}
-
-// Capture Method Enum
+// Capture method enum
 export enum CaptureMethod {
   AUTOMATIC = 'automatic',
   MANUAL = 'manual',
   MANUAL_MULTIPLE = 'manual_multiple',
-  SCHEDULED = 'scheduled',
 }
 
-// Payment Schema
+// Payment method enum
+export enum PaymentMethod {
+  CARD = 'card',
+  CARD_REDIRECT = 'card_redirect',
+  PAY_LATER = 'pay_later',
+  WALLET = 'wallet',
+  BANK_REDIRECT = 'bank_redirect',
+  BANK_TRANSFER = 'bank_transfer',
+  CRYPTO = 'crypto',
+  BANK_DEBIT = 'bank_debit',
+  REWARD = 'reward',
+  UPI = 'upi',
+  VOUCHER = 'voucher',
+  GIFT_CARD = 'gift_card',
+  OPEN_BANKING = 'open_banking',
+}
+
+// Payment attempt schema
+export const PaymentAttemptSchema = z.object({
+  attempt_id: z.string(),
+  status: z.nativeEnum(PaymentStatus),
+  amount: z.number(),
+  currency: z.string(),
+  connector: z.string().nullable(),
+  error_message: z.string().nullable(),
+  error_code: z.string().nullable(),
+  payment_method: z.nativeEnum(PaymentMethod).nullable(),
+  connector_transaction_id: z.string().nullable(),
+  authentication_type: z.string().nullable(),
+  created_at: z.string(),
+  modified_at: z.string(),
+})
+
+// Capture response schema
+export const CaptureResponseSchema = z.object({
+  capture_id: z.string(),
+  status: z.string(),
+  amount: z.number(),
+  currency: z.string(),
+  connector: z.string(),
+  authorized_attempt_id: z.string(),
+  connector_capture_id: z.string().nullable(),
+  capture_sequence: z.number(),
+  error_message: z.string().nullable(),
+  error_code: z.string().nullable(),
+  error_reason: z.string().nullable(),
+  reference_id: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+})
+
+// Payment method data schema
+export const PaymentMethodDataSchema = z.object({
+  card: z.object({
+    last4: z.string(),
+    card_type: z.string().optional(),
+    card_network: z.string().optional(),
+    card_issuer: z.string().optional(),
+    card_exp_month: z.string().optional(),
+    card_exp_year: z.string().optional(),
+    card_holder_name: z.string().optional(),
+  }).optional(),
+  bank_transfer: z.object({
+    bank_name: z.string().optional(),
+    bank_country_code: z.string().optional(),
+    bank_city: z.string().optional(),
+  }).optional(),
+  wallet: z.object({
+    type: z.string(),
+    provider: z.string().optional(),
+  }).optional(),
+})
+
+// Payment schema
 export const PaymentSchema = z.object({
   payment_id: z.string(),
   merchant_id: z.string(),
   status: z.nativeEnum(PaymentStatus),
-  amount: z.number().int().positive(),
-  currency: z.string().length(3),
-  amount_captured: z.number().int().optional(),
-  customer_id: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
-  return_url: z.string().url().optional().nullable(),
-  setup_future_usage: z.enum(['on_session', 'off_session']).optional().nullable(),
-  payment_method: z.nativeEnum(PaymentMethodType).optional().nullable(),
-  payment_method_data: z.any().optional().nullable(),
-  capture_method: z.nativeEnum(CaptureMethod).optional(),
-  authentication_type: z.enum(['no_three_ds', 'three_ds']).optional(),
-  created_at: z.string().datetime().optional(),
-  updated_at: z.string().datetime().optional(),
-  last_synced_at: z.string().datetime().optional(),
-  reference_id: z.string().optional().nullable(),
-  business_label: z.string().optional().nullable(),
-  business_sub_label: z.string().optional().nullable(),
-  allowed_payment_method_types: z.array(z.nativeEnum(PaymentMethodType)).optional(),
-  connector: z.string().optional().nullable(),
-  statement_descriptor_name: z.string().optional().nullable(),
-  statement_descriptor_suffix: z.string().optional().nullable(),
-  metadata: z.record(z.string(), z.any()).optional().nullable(),
-  profile_id: z.string().optional().nullable(),
-  attempt_count: z.number().int().optional(),
-  merchant_decision: z.string().optional().nullable(),
-  error_message: z.string().optional().nullable(),
-  error_code: z.string().optional().nullable(),
-  payment_token: z.string().optional().nullable(),
-  connector_transaction_id: z.string().optional().nullable(),
-  capture_on: z.string().datetime().optional().nullable(),
-  confirm: z.boolean().optional(),
-  client_secret: z.string().optional().nullable(),
-  mandate_id: z.string().optional().nullable(),
-  browser_info: z.any().optional().nullable(),
-  email: z.string().email().optional().nullable(),
-  name: z.string().optional().nullable(),
-  phone: z.string().optional().nullable(),
-  shipping: z.any().optional().nullable(),
-  billing: z.any().optional().nullable(),
+  amount: z.number(),
+  net_amount: z.number(),
+  amount_capturable: z.number().optional(),
+  amount_received: z.number().nullable(),
+  currency: z.string(),
+  connector: z.string().nullable(),
+  client_secret: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string().nullable(),
+  capture_on: z.string().nullable(),
+  capture_method: z.nativeEnum(CaptureMethod).nullable(),
+  confirm: z.boolean(),
+  customer_id: z.string().nullable(),
+  customer: CustomerSchema.nullable(),
+  description: z.string().nullable(),
+  return_url: z.string().nullable(),
+  setup_future_usage: z.enum(['on_session', 'off_session']).nullable(),
+  off_session: z.boolean().nullable(),
+  payment_method: z.nativeEnum(PaymentMethod).nullable(),
+  payment_method_data: PaymentMethodDataSchema.nullable(),
+  payment_method_type: z.string().nullable(),
+  payment_token: z.string().nullable(),
+  billing: z.object({
+    address: AddressSchema.nullable(),
+    phone: z.object({
+      number: z.string().nullable(),
+      country_code: z.string().nullable(),
+    }).nullable(),
+    email: z.string().email().nullable(),
+  }).nullable(),
+  shipping: z.object({
+    address: AddressSchema.nullable(),
+    phone: z.object({
+      number: z.string().nullable(),
+      country_code: z.string().nullable(),
+    }).nullable(),
+    email: z.string().email().nullable(),
+  }).nullable(),
+  statement_descriptor_name: z.string().nullable(),
+  statement_descriptor_suffix: z.string().nullable(),
+  mandate_id: z.string().nullable(),
+  mandate_data: z.any().nullable(),
+  browser_info: z.any().nullable(),
+  error_code: z.string().nullable(),
+  error_message: z.string().nullable(),
+  error_reason: z.string().nullable(),
+  payment_experience: z.string().nullable(),
+  payment_method_status: z.string().nullable(),
+  connector_transaction_id: z.string().nullable(),
+  metadata: z.record(z.any()).nullable(),
+  refunds: z.array(RefundResponseSchema).nullable(),
+  disputes: z.array(DisputeResponseSchema).nullable(),
+  attempts: z.array(PaymentAttemptSchema).nullable(),
+  captures: z.array(CaptureResponseSchema).nullable(),
+  authentication_type: z.string().nullable(),
+  merchant_connector_id: z.string().nullable(),
+  profile_id: z.string().nullable(),
+  attempt_count: z.number(),
+  merchant_decision: z.string().nullable(),
+  merchant_order_reference_id: z.string().nullable(),
+  incremental_authorization_allowed: z.boolean().nullable(),
+  authorization_count: z.number().nullable(),
+  session_expiry: z.string().nullable(),
+  fingerprint: z.string().nullable(),
+  payment_link: z.any().nullable(),
+  external_authentication_details: z.any().nullable(),
+  external_3ds_authentication_attempted: z.boolean().nullable(),
+  expires_on: z.string().nullable(),
+  frm_metadata: z.any().nullable(),
 })
 
+// Type exports
 export type Payment = z.infer<typeof PaymentSchema>
+export type PaymentAttempt = z.infer<typeof PaymentAttemptSchema>
+export type CaptureResponse = z.infer<typeof CaptureResponseSchema>
+export type PaymentMethodData = z.infer<typeof PaymentMethodDataSchema>
 
-// Payment Create Request Schema
-export const PaymentCreateRequestSchema = z.object({
-  amount: z.number().int().positive(),
-  currency: z.string().length(3),
-  capture_method: z.nativeEnum(CaptureMethod).optional(),
-  amount_to_capture: z.number().int().positive().optional(),
-  confirm: z.boolean().optional(),
-  customer_id: z.string().optional(),
-  email: z.string().email().optional(),
-  name: z.string().optional(),
-  phone: z.string().optional(),
-  description: z.string().optional(),
-  return_url: z.string().url().optional(),
-  setup_future_usage: z.enum(['on_session', 'off_session']).optional(),
-  payment_method: z.nativeEnum(PaymentMethodType).optional(),
-  payment_method_data: z.any().optional(),
-  billing: z.any().optional(),
-  shipping: z.any().optional(),
-  statement_descriptor_name: z.string().max(22).optional(),
-  statement_descriptor_suffix: z.string().max(22).optional(),
-  metadata: z.record(z.string(), z.any()).optional(),
-  routing: z.any().optional(),
-  authentication_type: z.enum(['no_three_ds', 'three_ds']).optional(),
-  mandate_id: z.string().optional(),
-  browser_info: z.any().optional(),
-  payment_id: z.string().length(30).optional(),
-  merchant_id: z.string().optional(),
-  profile_id: z.string().optional(),
-})
+// Request types
+export interface PaymentCreateRequest {
+  amount: number
+  currency: string
+  capture_method?: CaptureMethod
+  capture_on?: string
+  confirm?: boolean
+  customer?: any
+  customer_id?: string
+  description?: string
+  return_url?: string
+  setup_future_usage?: 'on_session' | 'off_session'
+  payment_method_data?: any
+  payment_method?: PaymentMethod
+  payment_token?: string
+  billing?: any
+  shipping?: any
+  statement_descriptor_name?: string
+  statement_descriptor_suffix?: string
+  metadata?: Record<string, any>
+  routing?: any
+  authentication_type?: string
+  mandate_id?: string
+  browser_info?: any
+  merchant_order_reference_id?: string
+  off_session?: boolean
+}
 
-export type PaymentCreateRequest = z.infer<typeof PaymentCreateRequestSchema>
+export interface PaymentUpdateRequest {
+  amount?: number
+  currency?: string
+  confirm?: boolean
+  capture_method?: CaptureMethod
+  description?: string
+  return_url?: string
+  setup_future_usage?: 'on_session' | 'off_session'
+  payment_method_data?: any
+  payment_token?: string
+  billing?: any
+  shipping?: any
+  statement_descriptor_name?: string
+  statement_descriptor_suffix?: string
+  metadata?: Record<string, any>
+}
 
-// Payment Update Request Schema
-export const PaymentUpdateRequestSchema = PaymentCreateRequestSchema.partial()
+export interface PaymentCaptureRequest {
+  amount_to_capture?: number
+  statement_descriptor_suffix?: string
+}
 
-export type PaymentUpdateRequest = z.infer<typeof PaymentUpdateRequestSchema>
+export interface PaymentCancelRequest {
+  cancellation_reason: string
+}
 
-// Payment Capture Request Schema
-export const PaymentCaptureRequestSchema = z.object({
-  amount_to_capture: z.number().int().positive().optional(),
-  statement_descriptor_suffix: z.string().max(22).optional(),
-  metadata: z.record(z.string(), z.any()).optional(),
-})
+export interface PaymentListRequest {
+  customer_id?: string
+  starting_after?: string
+  ending_before?: string
+  limit?: number
+  offset?: number
+  created?: {
+    gt?: string
+    gte?: string
+    lt?: string
+    lte?: string
+  }
+  currency?: string
+  status?: string[]
+  payment_method?: string[]
+  payment_method_type?: string[]
+  connector?: string[]
+}
 
-export type PaymentCaptureRequest = z.infer<typeof PaymentCaptureRequestSchema>
-
-// Payment List Request Schema
-export const PaymentListRequestSchema = z.object({
-  customer_id: z.string().optional(),
-  limit: z.number().int().min(1).max(100).optional(),
-  offset: z.number().int().min(0).optional(),
-  currency: z.string().length(3).optional(),
-  status: z.array(z.nativeEnum(PaymentStatus)).optional(),
-  payment_method: z.array(z.nativeEnum(PaymentMethodType)).optional(),
-  time_range: z.object({
-    start_time: z.string().datetime(),
-    end_time: z.string().datetime().optional(),
-  }).optional(),
-})
-
-export type PaymentListRequest = z.infer<typeof PaymentListRequestSchema>
-
-// Payment List Response Schema
+// List response schema
 export const PaymentListResponseSchema = z.object({
-  count: z.number().int(),
-  total_count: z.number().int(),
+  count: z.number(),
+  total_count: z.number(),
   data: z.array(PaymentSchema),
 })
 
 export type PaymentListResponse = z.infer<typeof PaymentListResponseSchema>
-
-// Helper functions
-export class PaymentEntity {
-  static isSuccessful(payment: Payment): boolean {
-    return payment.status === PaymentStatus.SUCCEEDED
-  }
-
-  static isPending(payment: Payment): boolean {
-    return [
-      PaymentStatus.PROCESSING,
-      PaymentStatus.REQUIRES_PAYMENT_METHOD,
-      PaymentStatus.REQUIRES_CONFIRMATION,
-      PaymentStatus.REQUIRES_ACTION,
-      PaymentStatus.PROCESSING_PAYMENT,
-      PaymentStatus.REQUIRES_CAPTURE,
-    ].includes(payment.status)
-  }
-
-  static isFailed(payment: Payment): boolean {
-    return [
-      PaymentStatus.FAILED,
-      PaymentStatus.CANCELLED,
-      PaymentStatus.VOIDED,
-      PaymentStatus.CAPTURE_FAILED,
-    ].includes(payment.status)
-  }
-
-  static canBeCaptured(payment: Payment): boolean {
-    return payment.status === PaymentStatus.REQUIRES_CAPTURE
-  }
-
-  static canBeCancelled(payment: Payment): boolean {
-    return this.isPending(payment) || payment.status === PaymentStatus.REQUIRES_CAPTURE
-  }
-
-  static canBeRefunded(payment: Payment): boolean {
-    return payment.status === PaymentStatus.SUCCEEDED || 
-           payment.status === PaymentStatus.PARTIALLY_CAPTURED
-  }
-
-  static getStatusColor(status: PaymentStatus): 'green' | 'yellow' | 'red' | 'gray' {
-    if (status === PaymentStatus.SUCCEEDED) return 'green'
-    if (this.isPending({ status } as Payment)) return 'yellow'
-    if (this.isFailed({ status } as Payment)) return 'red'
-    return 'gray'
-  }
-
-  static formatAmount(amount: number, currency: string): string {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount / 100)
-  }
-}

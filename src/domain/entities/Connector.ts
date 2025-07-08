@@ -1,13 +1,6 @@
 import { z } from 'zod'
-import { PaymentMethodType } from './Payment'
 
-// Connector Status Enum
-export enum ConnectorStatus {
-  INACTIVE = 'inactive',
-  ACTIVE = 'active',
-}
-
-// Connector Type Enum
+// Connector type enum
 export enum ConnectorType {
   PAYMENT_PROCESSOR = 'payment_processor',
   PAYMENT_VAS = 'payment_vas',
@@ -17,199 +10,213 @@ export enum ConnectorType {
   FRAUD_CHECK = 'fraud_check',
 }
 
-// Supported Connectors
-export enum ConnectorName {
-  STRIPE = 'stripe',
-  PAYPAL = 'paypal',
-  ADYEN = 'adyen',
-  CHECKOUT = 'checkout',
-  PAYEEZY = 'payeezy',
-  BRAINTREE = 'braintree',
-  KLARNA = 'klarna',
-  WORLDPAY = 'worldpay',
-  MULTISAFEPAY = 'multisafepay',
-  BLUESNAP = 'bluesnap',
-  NUVEI = 'nuvei',
-  PAYU = 'payu',
-  TRUSTPAY = 'trustpay',
-  CYBERSOURCE = 'cybersource',
-  SHIFT4 = 'shift4',
-  RAPYD = 'rapyd',
-  FISERV = 'fiserv',
-  HELCIM = 'helcim',
-  IATAPAY = 'iatapay',
-  GLOBALPAY = 'globalpay',
-  WORLDLINE = 'worldline',
-  STAX = 'stax',
-  NETNAXEPT = 'netnaxept',
-  NMI = 'nmi',
-  PAYONE = 'payone',
-  WISE = 'wise',
-  TSYS = 'tsys',
+// Connector status enum
+export enum ConnectorStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
 }
 
-// Payment Method Schema
-export const PaymentMethodSchema = z.object({
-  payment_method: z.nativeEnum(PaymentMethodType),
-  payment_method_types: z.array(z.object({
-    payment_method_type: z.string(),
-    payment_experience: z.array(z.string()).optional(),
-    card_networks: z.array(z.string()).optional(),
-    banks: z.array(z.string()).optional(),
-    currencies: z.array(z.string()).optional(),
+// Payment method type schema
+export const PaymentMethodTypeSchema = z.object({
+  payment_method_type: z.string(),
+  card_networks: z.array(z.string()).nullable(),
+  required_fields: z.record(z.any()).nullable(),
+  surcharge_details: z.any().nullable(),
+  pm_auth_connector: z.string().nullable(),
+})
+
+// Payment methods enabled schema
+export const PaymentMethodsEnabledSchema = z.object({
+  payment_method: z.string(),
+  payment_method_types: z.array(PaymentMethodTypeSchema).nullable(),
+})
+
+// Connector auth type schema
+export const ConnectorAuthTypeSchema = z.discriminatedUnion('auth_type', [
+  z.object({
+    auth_type: z.literal('HeaderKey'),
+    api_key: z.string(),
+  }),
+  z.object({
+    auth_type: z.literal('BodyKey'),
+    api_key: z.string(),
+    key1: z.string(),
+  }),
+  z.object({
+    auth_type: z.literal('SignatureKey'),
+    api_key: z.string(),
+    key1: z.string(),
+    api_secret: z.string(),
+  }),
+  z.object({
+    auth_type: z.literal('MultiAuthKey'),
+    api_key: z.string(),
+    key1: z.string(),
+    api_secret: z.string(),
+    key2: z.string(),
+  }),
+  z.object({
+    auth_type: z.literal('CurrencyAuthKey'),
+    auth_key_map: z.record(z.object({
+      api_key: z.string(),
+      api_secret: z.string(),
+    })),
+  }),
+  z.object({
+    auth_type: z.literal('TemporaryAuth'),
+  }),
+])
+
+// Connector webhook details schema
+export const ConnectorWebhookDetailsSchema = z.object({
+  merchant_secret: z.string(),
+})
+
+// Frm configs schema
+export const FrmConfigsSchema = z.object({
+  gateway: z.string(),
+  payment_methods: z.array(z.object({
+    payment_method: z.string(),
+    payment_method_types: z.array(z.object({
+      payment_method_type: z.string(),
+      card_networks: z.array(z.string()).nullable(),
+      flow: z.string(),
+      action: z.string(),
+    })),
   })),
 })
 
-export type PaymentMethod = z.infer<typeof PaymentMethodSchema>
-
-// Connector Account Schema
+// Connector account schema
 export const ConnectorAccountSchema = z.object({
   merchant_connector_id: z.string(),
   connector_type: z.nativeEnum(ConnectorType),
   connector_name: z.string(),
-  connector_label: z.string().optional(),
-  connector_account_details: z.record(z.string(), z.any()),
-  test_mode: z.boolean().optional(),
-  disabled: z.boolean().optional(),
-  payment_methods_enabled: z.array(PaymentMethodSchema).optional(),
-  metadata: z.record(z.string(), z.any()).optional(),
-  business_country: z.string().optional(),
-  business_label: z.string().optional(),
-  business_sub_label: z.string().optional(),
+  connector_label: z.string().nullable(),
+  connector_account_details: ConnectorAuthTypeSchema,
+  test_mode: z.boolean().nullable(),
+  disabled: z.boolean().nullable(),
+  merchant_id: z.string(),
+  payment_methods_enabled: z.array(PaymentMethodsEnabledSchema).nullable(),
+  connector_webhook_details: ConnectorWebhookDetailsSchema.nullable(),
+  metadata: z.record(z.any()).nullable(),
+  frm_configs: z.array(FrmConfigsSchema).nullable(),
   status: z.nativeEnum(ConnectorStatus),
-  created_at: z.string().datetime().optional(),
-  modified_at: z.string().datetime().optional(),
-  profile_id: z.string().optional(),
+  created_at: z.string(),
+  modified_at: z.string(),
+  profile_id: z.string().nullable(),
+  applepay_verified_domains: z.array(z.string()).nullable(),
+  pm_auth_config: z.any().nullable(),
+  additional_merchant_data: z.any().nullable(),
+  connector_wallets_details: z.any().nullable(),
 })
 
+// Type exports
 export type ConnectorAccount = z.infer<typeof ConnectorAccountSchema>
+export type PaymentMethodType = z.infer<typeof PaymentMethodTypeSchema>
+export type PaymentMethodsEnabled = z.infer<typeof PaymentMethodsEnabledSchema>
+export type ConnectorAuthType = z.infer<typeof ConnectorAuthTypeSchema>
+export type ConnectorWebhookDetails = z.infer<typeof ConnectorWebhookDetailsSchema>
+export type FrmConfigs = z.infer<typeof FrmConfigsSchema>
 
-// Connector Response Schema (from list endpoint)
-export const ConnectorResponseSchema = z.object({
-  connector: z.nativeEnum(ConnectorName),
-  connector_label: z.string().optional(),
-})
+// Request types
+export interface ConnectorCreateRequest {
+  connector_type: ConnectorType
+  connector_name: string
+  connector_label?: string
+  connector_account_details: any
+  test_mode?: boolean
+  disabled?: boolean
+  payment_methods_enabled?: PaymentMethodsEnabled[]
+  connector_webhook_details?: ConnectorWebhookDetails
+  metadata?: Record<string, any>
+  frm_configs?: FrmConfigs[]
+}
 
-export type ConnectorResponse = z.infer<typeof ConnectorResponseSchema>
+export interface ConnectorUpdateRequest {
+  connector_type?: ConnectorType
+  connector_label?: string
+  connector_account_details?: any
+  test_mode?: boolean
+  disabled?: boolean
+  payment_methods_enabled?: PaymentMethodsEnabled[]
+  connector_webhook_details?: ConnectorWebhookDetails
+  metadata?: Record<string, any>
+  frm_configs?: FrmConfigs[]
+  status?: ConnectorStatus
+}
 
-// Connector Features Schema
-export const ConnectorFeatureSchema = z.object({
-  connector_name: z.string(),
-  features: z.object({
-    payments: z.object({
-      supported: z.boolean(),
-      payment_methods: z.array(PaymentMethodSchema).optional(),
-    }).optional(),
-    refunds: z.object({
-      supported: z.boolean(),
-      instant_refund: z.boolean().optional(),
-      refund_reasons: z.array(z.string()).optional(),
-    }).optional(),
-    disputes: z.object({
-      supported: z.boolean(),
-      webhook_support: z.boolean().optional(),
-    }).optional(),
-    mandates: z.object({
-      supported: z.boolean(),
-      recurring_payments: z.boolean().optional(),
-    }).optional(),
-  }),
-})
-
-export type ConnectorFeature = z.infer<typeof ConnectorFeatureSchema>
-
-// Helper functions
+// Utility class for connector operations
 export class ConnectorEntity {
-  static getLogoPath(connectorName: string): string {
-    return `/resources/connectors/${connectorName.toUpperCase()}.svg`
-  }
-
-  static getDisplayName(connectorName: string): string {
-    const displayNames: Record<string, string> = {
-      stripe: 'Stripe',
-      paypal: 'PayPal',
-      adyen: 'Adyen',
-      checkout: 'Checkout.com',
-      payeezy: 'Payeezy',
-      braintree: 'Braintree',
-      klarna: 'Klarna',
-      worldpay: 'Worldpay',
-      multisafepay: 'MultiSafepay',
-      bluesnap: 'BlueSnap',
-      nuvei: 'Nuvei',
-      payu: 'PayU',
-      trustpay: 'TrustPay',
-      cybersource: 'Cybersource',
-      shift4: 'Shift4',
-      rapyd: 'Rapyd',
-      fiserv: 'Fiserv',
-      helcim: 'Helcim',
-      iatapay: 'IATAPay',
-      globalpay: 'GlobalPay',
-      worldline: 'Worldline',
-      stax: 'Stax',
-      netnaxept: 'Nets/Nexept',
-      nmi: 'NMI',
-      payone: 'Payone',
-      wise: 'Wise',
-      tsys: 'TSYS',
-    }
-    
-    return displayNames[connectorName.toLowerCase()] || connectorName
-  }
-
+  // Check if connector is active and enabled
   static isActive(connector: ConnectorAccount): boolean {
     return connector.status === ConnectorStatus.ACTIVE && !connector.disabled
   }
 
+  // Get supported payment methods
   static getSupportedPaymentMethods(connector: ConnectorAccount): string[] {
     if (!connector.payment_methods_enabled) return []
     
-    const methods = new Set<string>()
-    connector.payment_methods_enabled.forEach(pm => {
-      methods.add(pm.payment_method)
-      pm.payment_method_types?.forEach(pmt => {
-        methods.add(pmt.payment_method_type)
-      })
-    })
-    
-    return Array.from(methods)
+    return connector.payment_methods_enabled
+      .map(pm => pm.payment_method)
+      .filter((value, index, self) => self.indexOf(value) === index)
   }
 
+  // Get supported payment method types for a payment method
+  static getSupportedPaymentMethodTypes(
+    connector: ConnectorAccount,
+    paymentMethod: string
+  ): PaymentMethodType[] {
+    if (!connector.payment_methods_enabled) return []
+    
+    const pm = connector.payment_methods_enabled.find(
+      p => p.payment_method === paymentMethod
+    )
+    
+    return pm?.payment_method_types || []
+  }
+
+  // Check if connector supports a payment method
+  static supportsPaymentMethod(
+    connector: ConnectorAccount,
+    paymentMethod: string
+  ): boolean {
+    return this.getSupportedPaymentMethods(connector).includes(paymentMethod)
+  }
+
+  // Get connector type label
   static getConnectorTypeLabel(type: ConnectorType): string {
     const labels: Record<ConnectorType, string> = {
       [ConnectorType.PAYMENT_PROCESSOR]: 'Payment Processor',
-      [ConnectorType.PAYMENT_VAS]: 'Value Added Service',
+      [ConnectorType.PAYMENT_VAS]: 'Payment VAS',
       [ConnectorType.PAYMENT_METHOD_AUTH]: 'Payment Method Auth',
-      [ConnectorType.AUTHENTICATION_PROCESSOR]: 'Authentication',
+      [ConnectorType.AUTHENTICATION_PROCESSOR]: 'Authentication Processor',
       [ConnectorType.PAYOUT_PROCESSOR]: 'Payout Processor',
       [ConnectorType.FRAUD_CHECK]: 'Fraud Check',
     }
-    
     return labels[type] || type
   }
 
-  static getConnectorTypeColor(type: ConnectorType): string {
-    const colors: Record<ConnectorType, string> = {
-      [ConnectorType.PAYMENT_PROCESSOR]: 'purple',
-      [ConnectorType.PAYMENT_VAS]: 'blue',
-      [ConnectorType.PAYMENT_METHOD_AUTH]: 'green',
-      [ConnectorType.AUTHENTICATION_PROCESSOR]: 'yellow',
-      [ConnectorType.PAYOUT_PROCESSOR]: 'cyan',
-      [ConnectorType.FRAUD_CHECK]: 'red',
-    }
-    
-    return colors[type] || 'gray'
+  // Group connectors by type
+  static groupConnectorsByType(
+    connectors: ConnectorAccount[]
+  ): Record<ConnectorType, ConnectorAccount[]> {
+    return connectors.reduce((acc, connector) => {
+      const type = connector.connector_type
+      if (!acc[type]) {
+        acc[type] = []
+      }
+      acc[type].push(connector)
+      return acc
+    }, {} as Record<ConnectorType, ConnectorAccount[]>)
   }
 
-  static groupConnectorsByType(connectors: ConnectorAccount[]): Record<ConnectorType, ConnectorAccount[]> {
-    return connectors.reduce((groups, connector) => {
-      const type = connector.connector_type
-      if (!groups[type]) {
-        groups[type] = []
-      }
-      groups[type].push(connector)
-      return groups
-    }, {} as Record<ConnectorType, ConnectorAccount[]>)
+  // Filter active connectors
+  static filterActive(connectors: ConnectorAccount[]): ConnectorAccount[] {
+    return connectors.filter(connector => this.isActive(connector))
+  }
+
+  // Get connector display name
+  static getDisplayName(connector: ConnectorAccount): string {
+    return connector.connector_label || connector.connector_name
   }
 }
