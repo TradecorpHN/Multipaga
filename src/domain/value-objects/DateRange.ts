@@ -268,7 +268,7 @@ export class DateRange {
   /**
    * Verifica si este rango contiene completamente a otro
    */
-  public contains(other: DateRange): boolean {
+  public fullyContains(other: DateRange): boolean {
     return this._startDate <= other._startDate && this._endDate >= other._endDate
   }
 

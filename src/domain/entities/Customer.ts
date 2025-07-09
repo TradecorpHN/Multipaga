@@ -19,7 +19,7 @@ const AddressSchema = z.object({
 })
 
 // Schema de validación para el cliente
-const CustomerSchema = z.object({
+export const CustomerSchema = z.object({
   customer_id: z.string().min(1).max(64, 'ID de cliente no puede exceder 64 caracteres'),
   name: z.string().min(1, 'Nombre es requerido').max(255),
   email: z.string().email('Email debe ser válido').max(320),
@@ -46,8 +46,8 @@ export type CustomerData = z.infer<typeof CustomerSchema>
 export class Customer {
   private constructor(
     private readonly _customerId: string,
-    private readonly _name: string,
-    private readonly _email: string,
+    private _name: string,
+    private _email: string,
     private readonly _createdAt: Date,
     private _modifiedAt: Date,
     private _phone?: string,

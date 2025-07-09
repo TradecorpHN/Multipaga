@@ -406,14 +406,18 @@ export class PaymentUtils {
   /**
    * Mapea métodos de captura a etiquetas legibles
    */
-  static getCaptureMethodLabel(method: CaptureMethod): string {
-    const methodLabels: Record<CaptureMethod, string> = {
-      'automatic': 'Automática',
-      'manual': 'Manual'
-    }
-    
-    return methodLabels[method] || method
+static getCaptureMethodLabel(method: CaptureMethod): string {
+  const methodLabels: Record<CaptureMethod, string> = {
+    automatic:             'Automática',
+    manual:                'Manual',
+    manual_multiple:       'Manual múltiple',
+    scheduled:             'Programado',
+    sequential_automatic:  'Automática secuencial',
   }
+
+  return methodLabels[method] || method
+}
+
 
   /**
    * Determina si un pago puede ser capturado

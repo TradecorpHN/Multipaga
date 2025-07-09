@@ -415,7 +415,7 @@ export class Refund {
    * Confirma el éxito del reembolso
    */
   public confirmSuccess(): void {
-    if (!this._refundStatus.canTransitionTo('success')) {
+    if (!this._refundStatus.canTransitionTo(RefundStatus.fromString('success'))) {
       throw new Error('No se puede confirmar el éxito desde el estado actual')
     }
 
@@ -427,7 +427,7 @@ export class Refund {
    * Marca el reembolso como fallido
    */
   public markAsFailed(failureReason: string, errorCode?: string): void {
-    if (!this._refundStatus.canTransitionTo('failure')) {
+    if (!this._refundStatus.canTransitionTo(RefundStatus.fromString('failure'))) {
       throw new Error('No se puede marcar como fallido desde el estado actual')
     }
 
@@ -622,3 +622,5 @@ export class Refund {
     }
   }
 }
+
+export const RefundResponseSchema = RefundSchema

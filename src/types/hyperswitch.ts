@@ -2,7 +2,15 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Tipos base según OpenAPI de Hyperswitch
 // ──────────────────────────────────────────────────────────────────────────────
+export type CaptureMethod =
+  | 'automatic'
+  | 'manual'
+  | 'manual_multiple'
+  | 'scheduled'
+  | 'sequential_automatic'
 
+
+  
 export type Currency =
   | 'USD'
   | 'EUR'
@@ -165,6 +173,18 @@ export type Connector =
 // Interfaces para Payments
 // ──────────────────────────────────────────────────────────────────────────────
 
+export interface PaymentListRequest {
+  customer_id?: string
+  starting_after?: string
+  ending_before?: string
+  limit?: number
+  created?: string
+  created_lt?: string
+  created_gt?: string
+  created_lte?: string
+  created_gte?: string
+}
+
 export interface PaymentRequest {
   amount: number
   currency: Currency
@@ -257,6 +277,19 @@ export interface CardDetails {
   card_issuing_country?: string
   bank_code?: string
   nick_name?: string
+}
+
+export interface WebhookDetails {
+  webhook_version?: string
+  webhook_username?: string
+  webhook_password?: string
+  webhook_url?: string
+  payment_created_enabled?: boolean
+  payment_succeeded_enabled?: boolean
+  payment_failed_enabled?: boolean
+}
+export interface RoutingAlgorithm {
+  [key: string]: any
 }
 
 export interface WalletDetails {
@@ -701,10 +734,165 @@ export interface WebhookPayload {
   api_version: string
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// ProfileAcquirerResponse (components.schemas.ProfileAcquirerResponse) :contentReference[oaicite:0]{index=0}
+// ──────────────────────────────────────────────────────────────────────────────
+export interface ProfileAcquirerResponse {
+  /** Unique identifier of the profile acquirer */
+  profile_acquirer_id: string
+  /** Merchant ID assigned by the acquirer */
+  acquirer_assigned_merchant_id: string
+  /** Merchant name */
+  merchant_name: string
+  /** Merchant country code assigned by acquirer */
+  merchant_country_code: string
+  /** Network provider (e.g., VISA, MASTERCARD) */
+  network: string
+  /** Acquirer BIN */
+  acquirer_bin: string
+  /** Acquirer ICA, si está disponible */
+  acquirer_ica?: string | null
+  /** Fraud rate for this acquirer configuration */
+  acquirer_fraud_rate: number
+  /** Parent profile ID */
+  profile_id: string
+}
+export interface AuthenticationConnectorDetails {
+  authentication_connectors: (
+    | 'threedsecureio'
+    | 'netcetera'
+    | 'gpayments'
+    | 'ctp_mastercard'
+    | 'unified_authentication_service'
+    | 'juspaythreedsserver'
+    | 'ctp_visa'
+  )[]
+  three_ds_requestor_url: string
+  three_ds_requestor_app_url?: string
+}
+export interface BusinessPaymentLinkConfig {
+  // campos de PaymentLinkConfigRequest (theme, logo, seller_name, etc.)
+  theme?: string
+  logo?: string
+  seller_name?: string
+  enable_button_only_on_form_ready?: boolean
+  payment_form_header_text?: string
+  payment_form_label_type?: string
+  show_card_terms?: boolean
+  is_setup_mandate_flow?: boolean
+  color_icon_card_cvc_error?: string
+
+  // campos añadidos en BusinessPaymentLinkConfig
+  allowed_domains?: string[]
+  branding_visibility?: boolean
+  card_holder_name_label?: string
+  card_expiration_label?: string
+  cvv_label?: string
+  card_form?: Record<string, any>
+  env?: string
+  domain_name?: string
+}
+export interface ProfileAcquirerResponse {
+  profile_acquirer_id: string
+  acquirer_assigned_merchant_id: string
+  merchant_name: string
+  merchant_country_code: string
+  network: string
+  acquirer_bin: string
+  acquirer_ica?: string | null
+  acquirer_fraud_rate: number
+  profile_id: string
+}
+// ──────────────────────────────────────────────────────────────────────────────
+// ProfileResponse (components.schemas.ProfileResponse)
+// ──────────────────────────────────────────────────────────────────────────────
+export interface ProfileResponse {
+  merchant_id: string
+  profile_id: string
+  profile_name: string
+  return_url?: string
+
+  // Configuración de seguridad
+  enable_payment_response_hash: boolean
+  payment_response_hash_key?: string
+  redirect_to_merchant_with_http_post: boolean
+
+  // Tu propiedad adicional para CVV (si la usas en tu lógica)
+  should_collect_cvv_during_payment?: boolean
+
+  // Detalles de webhook
+  webhook_details?: WebhookDetails
+  outgoing_webhook_custom_http_headers?: Record<string, string>
+
+  metadata?: Record<string, any>
+
+  // Autenticación 3DS
+  authentication_connector_details?: AuthenticationConnectorDetails
+
+  // Routing
+  routing_algorithm?: RoutingAlgorithm
+
+  // Tiempos de ejecución
+  intent_fulfillment_time?: number
+  order_fulfillment_time?: number
+
+  // Apple Pay
+  applepay_verified_domains?: string[]
+
+  // Advanced config
+  payment_link_config?: BusinessPaymentLinkConfig
+
+  // Recon Service
+  is_recon_enabled?: boolean
+
+  // Flags varias
+  is_tax_connector_enabled: boolean
+  is_network_tokenization_enabled: boolean
+  is_auto_retries_enabled: boolean
+  is_click_to_pay_enabled: boolean
+  is_clear_pan_retries_enabled: boolean
+  force_3ds_challenge: boolean
+  is_pre_network_tokenization_enabled: boolean
+
+  // Acquirers
+  acquirer_configs?: ProfileAcquirerResponse[]
+
+  // IFrame y categoría
+  is_iframe_redirection_enabled?: boolean
+  merchant_category_code?: string
+}
+// ──────────────────────────────────────────────────────────────────────────────
+// ProfileResponse (components.schemas.ProfileResponse)
+// ──────────────────────────────────────────────────────────────────────────────
+export interface ProfileResponse {
+  merchant_id: string
+  profile_id: string
+  profile_name: string
+  return_url?: string
+  enable_payment_response_hash: boolean
+  payment_response_hash_key?: string
+  redirect_to_merchant_with_http_post: boolean
+  webhook_details?: WebhookDetails
+  metadata?: Record<string, any>
+  is_tax_connector_enabled: boolean
+  is_network_tokenization_enabled: boolean
+  is_auto_retries_enabled: boolean
+  is_click_to_pay_enabled: boolean
+  is_clear_pan_retries_enabled: boolean
+  force_3ds_challenge: boolean
+  is_pre_network_tokenization_enabled: boolean
+  business_country?: string
+  business_label?: string
+  business_sub_label?: string
+  acquirer_configs?: ProfileAcquirerResponse[]
+  is_iframe_redirection_enabled?: boolean
+  merchant_category_code?: string
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Utility types
 // ──────────────────────────────────────────────────────────────────────────────
+export type BusinessProfile = ProfileResponse
 
 export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>
 export type PartialFields<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>

@@ -193,7 +193,7 @@ export interface IDisputeRepository {
    */
   findExpiringDisputes(
     merchantId: string,
-    daysAhead: number = 7
+    daysAhead: number
   ): Promise<DisputeSummary[]>
 
   /**
@@ -342,8 +342,8 @@ export interface IDisputeRepository {
    */
   exportDisputes(
     merchantId: string,
-    filters?: DisputeFilters,
-    format: 'csv' | 'excel'
+    format: 'csv' | 'excel',
+    filters?: DisputeFilters
   ): Promise<{
     download_url: string
     expires_at: Date

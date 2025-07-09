@@ -252,7 +252,7 @@ export class ConnectorType {
    */
   public static getProductionConnectors(): readonly string[] {
     return ConnectorType.VALID_TYPES.filter(
-      type => !ConnectorType.TYPE_CATEGORIES.test_connectors.includes(type)
+      type => !ConnectorType.TYPE_CATEGORIES.test_connectors.includes(type as any)
     )
   }
 
@@ -282,7 +282,7 @@ export class ConnectorType {
    */
   public getCategory(): string | null {
     for (const [category, connectors] of Object.entries(ConnectorType.TYPE_CATEGORIES)) {
-      if (connectors.includes(this._value as any)) {
+      if ((connectors as readonly string[]).includes(this._value)) {
         return category
       }
     }
@@ -294,7 +294,7 @@ export class ConnectorType {
    */
   public supportsPaymentMethod(paymentMethod: keyof typeof ConnectorType.PAYMENT_METHOD_SUPPORT): boolean {
     const supportedConnectors = ConnectorType.PAYMENT_METHOD_SUPPORT[paymentMethod]
-    return supportedConnectors ? supportedConnectors.includes(this._value as any) : false
+    return supportedConnectors ? (supportedConnectors as readonly string[]).includes(this._value) : false
   }
 
   /**
@@ -304,7 +304,7 @@ export class ConnectorType {
     const supportedMethods: string[] = []
     
     for (const [method, connectors] of Object.entries(ConnectorType.PAYMENT_METHOD_SUPPORT)) {
-      if (connectors.includes(this._value as any)) {
+      if ((connectors as readonly string[]).includes(this._value)) {
         supportedMethods.push(method)
       }
     }

@@ -292,7 +292,7 @@ export interface IRefundRepository {
    */
   findRecentFailures(
     merchantId: string,
-    hoursBack: number = 24
+    hoursBack: number
   ): Promise<RefundSummary[]>
 
   /**
@@ -417,8 +417,8 @@ export interface IRefundRepository {
    */
   exportRefunds(
     merchantId: string,
-    filters?: RefundFilters,
-    format: 'csv' | 'excel'
+    format: 'csv' | 'excel',
+    filters?: RefundFilters
   ): Promise<{
     download_url: string
     expires_at: Date

@@ -442,3 +442,5 @@ export class Dispute {
     }
   }
 }
+
+export const DisputeResponseSchema = DisputeSchema

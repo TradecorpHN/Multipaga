@@ -198,13 +198,7 @@ export class LoggingInterceptor {
       // Guardar request activo para calcular duración
       this.activeRequests.set(correlationId, { startTime, requestData })
 
-      // Log del request
-      if (this.config.enableRequestLogging) {
-        this.logger.info(`HTTP Request: ${requestData.method} ${url}`, {
-          correlationId,
-          ...requestData,
-        })
-      }
+
 
       // Añadir correlation ID a headers si está habilitado
       const enhancedRequest: RequestInit = { ...request }

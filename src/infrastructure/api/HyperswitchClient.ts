@@ -1,7 +1,11 @@
-import { env } from '@/presentation/lib/env-config'
-import { getAuthToken } from '@/lib/auth'
+// src/infrastructure/api/HyperswitchClient.ts
 
-// Error class for Hyperswitch API errors
+import { env } from '../../presentation/lib/env-config'
+import { getAuthHeaders } from '../../lib/auth'
+
+/**
+ * Error específico para errores de Hyperswitch API.
+ */
 export class HyperswitchError extends Error {
   public readonly statusCode: number
   public readonly errorCode?: string
@@ -24,7 +28,7 @@ export class HyperswitchError extends Error {
   }
 }
 
-// Request configuration interface
+/** Configura los parámetros de una petición. */
 interface RequestConfig {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   headers?: Record<string, string>
@@ -34,22 +38,20 @@ interface RequestConfig {
   skipAuth?: boolean
 }
 
-// Response interface
+/** Resultado interno tras cada petición. */
 interface HyperswitchResponse<T = any> {
   data: T
   headers: Headers
   status: number
 }
 
-// Retry configuration
+/** Parámetros para lógica de reintentos. */
 interface RetryConfig {
   maxAttempts: number
   initialDelay: number
   maxDelay: number
   backoffMultiplier: number
 }
-
-// Default retry configuration
 const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxAttempts: 3,
   initialDelay: 1000,
@@ -57,283 +59,257 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
   backoffMultiplier: 2,
 }
 
-// Hyperswitch API Client class
-class HyperswitchClient {
+/**
+ * Cliente para interactuar con Hyperswitch.
+ * Gestiona autenticación, timeouts, reintentos y parsing.
+ */
+export class HyperswitchClient {
   private baseUrl: string
   private timeout: number
   private merchantId: string | null = null
   private profileId: string | null = null
 
-  constructor() {
-    this.baseUrl = env.HYPERSWITCH_BASE_URL
-    this.timeout = env.HYPERSWITCH_TIMEOUT || 30000
-  }
+constructor() {
+  this.baseUrl = env.HYPERSWITCH_BASE_URL
+  const timeoutEnv = process.env.HYPERSWITCH_TIMEOUT
+  this.timeout = timeoutEnv ? Number(timeoutEnv) : 30000
+}
 
-  // Set auth context
+
+  /** Define el contexto de autenticación (merchant y profile). */
   public setAuthContext(merchantId: string, profileId: string) {
     this.merchantId = merchantId
     this.profileId = profileId
   }
 
-  // Clear auth context
+  /** Limpia el contexto de autenticación. */
   public clearAuthContext() {
     this.merchantId = null
     this.profileId = null
   }
 
-  // Build query string
+  /** Construye cadena de query params a partir de un objeto. */
   private buildQueryString(params: Record<string, any>): string {
     const searchParams = new URLSearchParams()
-    
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        if (Array.isArray(value)) {
-          value.forEach(v => searchParams.append(key, String(v)))
-        } else if (typeof value === 'object') {
-          searchParams.append(key, JSON.stringify(value))
-        } else {
-          searchParams.append(key, String(value))
-        }
+      if (value == null) return
+      if (Array.isArray(value)) {
+        value.forEach(v => searchParams.append(key, String(v)))
+      } else if (typeof value === 'object') {
+        searchParams.append(key, JSON.stringify(value))
+      } else {
+        searchParams.append(key, String(value))
       }
     })
-    
-    const queryString = searchParams.toString()
-    return queryString ? `?${queryString}` : ''
+    const qs = searchParams.toString()
+    return qs ? `?${qs}` : ''
   }
 
-  // Execute request with retry logic
+  /** Ejecuta la petición HTTP con reintentos y manejo de errores. */
   private async executeRequest<T>(
     url: string,
-    config: RequestConfig,
-    retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG
+    cfg: RequestConfig,
+    retryCfg: RetryConfig = DEFAULT_RETRY_CONFIG
   ): Promise<HyperswitchResponse<T>> {
     let lastError: Error | null = null
-    let delay = retryConfig.initialDelay
+    let delay = retryCfg.initialDelay
 
-    for (let attempt = 0; attempt < retryConfig.maxAttempts; attempt++) {
+    for (let attempt = 0; attempt < retryCfg.maxAttempts; attempt++) {
       try {
-        // Get auth token if needed
-        let authHeader: string | null = null
-        if (!config.skipAuth) {
-          authHeader = await getAuthToken()
-          if (!authHeader) {
-            throw new HyperswitchError('No authentication token available', 401)
-          }
-        }
+        // Headers de autenticación (o none si skipAuth)
+        const authHeaders = cfg.skipAuth ? {} : getAuthHeaders()
 
-        // Build headers
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'X-Client-Version': '1.0.0',
           'X-Merchant-ID': this.merchantId || '',
           'X-Profile-ID': this.profileId || '',
-          ...config.headers,
+          ...authHeaders,
+          ...cfg.headers,
         }
 
-        if (authHeader) {
-          headers['api-key'] = authHeader
-        }
-
-        // Build request options
-        const requestOptions: RequestInit = {
-          method: config.method || 'GET',
+        const reqOpts: RequestInit = {
+          method: cfg.method || 'GET',
           headers,
-          signal: AbortSignal.timeout(config.timeout || this.timeout),
+          signal: AbortSignal.timeout(cfg.timeout ?? this.timeout),
         }
 
-        // Add body if present
-        if (config.body && ['POST', 'PUT', 'PATCH'].includes(requestOptions.method!)) {
-          requestOptions.body = JSON.stringify(config.body)
+        if (
+          cfg.body != null &&
+          ['POST', 'PUT', 'PATCH'].includes(reqOpts.method!)
+        ) {
+          reqOpts.body = JSON.stringify(cfg.body)
         }
 
-        // Execute request
-        const response = await fetch(url, requestOptions)
+        const res = await fetch(url, reqOpts)
 
-        // Parse response
-        const contentType = response.headers.get('content-type')
-        let data: any
+        const ct = res.headers.get('content-type') || ''
+        const data = ct.includes('application/json')
+          ? await res.json()
+          : await res.text()
 
-        if (contentType?.includes('application/json')) {
-          data = await response.json()
-        } else {
-          data = await response.text()
-        }
-
-        // Handle errors
-        if (!response.ok) {
-          const error = new HyperswitchError(
-            data.error?.message || data.message || response.statusText,
-            response.status,
-            data.error?.code || data.error_code,
-            data.error?.type || data.error_type,
+        if (!res.ok) {
+          const errObj = typeof data === 'object' ? data : {}
+          const err = new HyperswitchError(
+            (errObj as any).error?.message ||
+              (errObj as any).message ||
+              res.statusText,
+            res.status,
+            (errObj as any).error?.code,
+            (errObj as any).error?.type,
             data
           )
-
-          // Don't retry on client errors (4xx)
-          if (response.status >= 400 && response.status < 500) {
-            throw error
-          }
-
-          // Retry on server errors (5xx)
-          lastError = error
+          if (res.status >= 400 && res.status < 500) throw err
+          lastError = err
         } else {
-          // Success
-          return {
-            data,
-            headers: response.headers,
-            status: response.status,
-          }
+          return { data, headers: res.headers, status: res.status }
         }
-      } catch (error) {
-        // Handle network errors
-        if (error instanceof HyperswitchError) {
-          throw error
+      } catch (e: any) {
+        if (e instanceof HyperswitchError) throw e
+        if (e.name === 'AbortError') {
+          throw new HyperswitchError('Request timeout', 408)
         }
-
-        if (error instanceof Error) {
-          if (error.name === 'AbortError') {
-            throw new HyperswitchError('Request timeout', 408)
-          }
-          lastError = error
-        }
+        lastError = e
       }
 
-      // Wait before retry
-      if (attempt < retryConfig.maxAttempts - 1) {
-        await new Promise(resolve => setTimeout(resolve, delay))
-        delay = Math.min(delay * retryConfig.backoffMultiplier, retryConfig.maxDelay)
+      if (attempt < retryCfg.maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, delay))
+        delay = Math.min(delay * retryCfg.backoffMultiplier, retryCfg.maxDelay)
       }
     }
 
-    // All retries failed
     throw new HyperswitchError(
-      lastError?.message || 'Request failed after all retries',
+      lastError?.message || 'Request failed after retries',
       500,
       'MAX_RETRIES_EXCEEDED'
     )
   }
 
-  // GET request
+  // Métodos HTTP expuestos:
+
   public async get<T = any>(
     endpoint: string,
     query?: Record<string, any>,
-    config?: Omit<RequestConfig, 'method' | 'body'>
+    cfg?: Omit<RequestConfig, 'method' | 'body'>
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}${query ? this.buildQueryString(query) : ''}`
-    const response = await this.executeRequest<T>(url, {
-      ...config,
-      method: 'GET',
-    })
-    return response.data
+    const url = `${this.baseUrl}${endpoint}${
+      query ? this.buildQueryString(query) : ''
+    }`
+    const res = await this.executeRequest<T>(url, { ...cfg, method: 'GET' })
+    return res.data
   }
 
-  // POST request
   public async post<T = any>(
     endpoint: string,
     body?: any,
-    config?: Omit<RequestConfig, 'method'>
+    cfg?: Omit<RequestConfig, 'method'>
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}${config?.query ? this.buildQueryString(config.query) : ''}`
-    const response = await this.executeRequest<T>(url, {
-      ...config,
+    const url = `${this.baseUrl}${endpoint}${
+      cfg?.query ? this.buildQueryString(cfg.query!) : ''
+    }`
+    const res = await this.executeRequest<T>(url, {
+      ...cfg,
       method: 'POST',
       body,
     })
-    return response.data
+    return res.data
   }
 
-  // PUT request
   public async put<T = any>(
     endpoint: string,
     body?: any,
-    config?: Omit<RequestConfig, 'method'>
+    cfg?: Omit<RequestConfig, 'method'>
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}${config?.query ? this.buildQueryString(config.query) : ''}`
-    const response = await this.executeRequest<T>(url, {
-      ...config,
+    const url = `${this.baseUrl}${endpoint}${
+      cfg?.query ? this.buildQueryString(cfg.query!) : ''
+    }`
+    const res = await this.executeRequest<T>(url, {
+      ...cfg,
       method: 'PUT',
       body,
     })
-    return response.data
+    return res.data
   }
 
-  // PATCH request
   public async patch<T = any>(
     endpoint: string,
     body?: any,
-    config?: Omit<RequestConfig, 'method'>
+    cfg?: Omit<RequestConfig, 'method'>
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}${config?.query ? this.buildQueryString(config.query) : ''}`
-    const response = await this.executeRequest<T>(url, {
-      ...config,
+    const url = `${this.baseUrl}${endpoint}${
+      cfg?.query ? this.buildQueryString(cfg.query!) : ''
+    }`
+    const res = await this.executeRequest<T>(url, {
+      ...cfg,
       method: 'PATCH',
       body,
     })
-    return response.data
+    return res.data
   }
 
-  // DELETE request
   public async delete<T = any>(
     endpoint: string,
-    config?: Omit<RequestConfig, 'method'>
+    cfg?: Omit<RequestConfig, 'method'>
   ): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}${config?.query ? this.buildQueryString(config.query) : ''}`
-    const response = await this.executeRequest<T>(url, {
-      ...config,
+    const url = `${this.baseUrl}${endpoint}${
+      cfg?.query ? this.buildQueryString(cfg.query!) : ''
+    }`
+    const res = await this.executeRequest<T>(url, {
+      ...cfg,
       method: 'DELETE',
     })
-    return response.data
+    return res.data
   }
 
-  // Upload file
+  /** Sube un archivo usando multipart/form-data. */
   public async upload<T = any>(
     endpoint: string,
     file: File,
     additionalData?: Record<string, any>,
-    config?: Omit<RequestConfig, 'method' | 'body'>
+    cfg?: Omit<RequestConfig, 'method' | 'body'>
   ): Promise<T> {
-    const formData = new FormData()
-    formData.append('file', file)
-
+    const form = new FormData()
+    form.append('file', file)
     if (additionalData) {
-      Object.entries(additionalData).forEach(([key, value]) => {
-        formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value))
-      })
-    }
-
-    const url = `${this.baseUrl}${endpoint}`
-    const authHeader = await getAuthToken()
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'api-key': authHeader || '',
-        'X-Merchant-ID': this.merchantId || '',
-        'X-Profile-ID': this.profileId || '',
-        ...config?.headers,
-      },
-      body: formData,
-      signal: AbortSignal.timeout(config?.timeout || this.timeout),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new HyperswitchError(
-        errorData.error?.message || response.statusText,
-        response.status,
-        errorData.error?.code,
-        errorData.error?.type,
-        errorData
+      Object.entries(additionalData).forEach(([k, v]) =>
+        form.append(k, typeof v === 'object' ? JSON.stringify(v) : String(v))
       )
     }
 
-    return response.json()
+    const url = `${this.baseUrl}${endpoint}`
+    const authHeaders = getAuthHeaders()
+    const headers: Record<string, string> = {
+      'X-Merchant-ID': this.merchantId || '',
+      'X-Profile-ID': this.profileId || '',
+      ...cfg?.headers,
+      ...authHeaders,
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: form,
+      signal: AbortSignal.timeout(cfg?.timeout ?? this.timeout),
+    })
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}))
+      throw new HyperswitchError(
+        errData.error?.message || res.statusText,
+        res.status,
+        errData.error?.code,
+        errData.error?.type,
+        errData
+      )
+    }
+
+    return (await res.json()) as T
   }
 }
 
-// Create singleton instance
+// Instancia única
 export const hyperswitchClient = new HyperswitchClient()
 
-// Export types
+// Exporta también los tipos
 export type { RequestConfig, HyperswitchResponse }

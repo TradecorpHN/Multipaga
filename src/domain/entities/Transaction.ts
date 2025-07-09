@@ -739,7 +739,7 @@ export class Transaction {
    * Verifica si la transacción puede ser reembolsada
    */
   public canBeRefunded(): boolean {
-    return this._status.isSuccessful() && this._amountReceived && this._amountReceived.amountInCents > 0
+    return this._status.isSuccessful() && !!this._amountReceived && !!this._amountReceived && this._amountReceived.amountInCents > 0
   }
 
   /**

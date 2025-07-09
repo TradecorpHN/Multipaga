@@ -288,7 +288,7 @@ export interface IPaymentRepository {
    */
   findRecentFailures(
     merchantId: string,
-    hoursBack: number = 24
+    hoursBack: number
   ): Promise<PaymentSummary[]>
 
   /**
@@ -427,8 +427,8 @@ export interface IPaymentRepository {
    */
   exportPayments(
     merchantId: string,
-    filters?: PaymentFilters,
-    format: 'csv' | 'excel'
+    format: 'csv' | 'excel',
+    filters?: PaymentFilters
   ): Promise<{
     download_url: string
     expires_at: Date
