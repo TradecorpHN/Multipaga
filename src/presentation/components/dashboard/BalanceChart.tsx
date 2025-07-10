@@ -16,17 +16,13 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from 'recharts'
 import {
   TrendingUp,
   TrendingDown,
   DollarSign,
-  Calendar,
   BarChart3,
-  PieChart as PieIcon,
   Activity,
-  Eye,
   Download,
   RefreshCw,
   Info,
@@ -48,8 +44,7 @@ import {
   TabsTrigger,
 } from '@/presentation/components/ui/Tabs'
 import { Skeleton } from '@/presentation/components/ui/Skeleton'
-import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from '@/presentation/components/ui/Tooltip'
-import { formatCurrency, formatNumber, formatPercentage } from '@/presentation/lib/formatters'
+import { formatCurrency, formatNumber, formatPercentage } from '@/presentation/components/ui/formatters'
 import { cn } from '@/presentation/lib/utils'
 
 interface BalanceDataPoint {
@@ -116,7 +111,7 @@ function CustomTooltip({ active, payload, label }: any) {
             />
             <span className="text-muted-foreground">{entry.name}:</span>
             <span className="font-medium">
-              {formatCurrency(entry.value, 'USD')}
+              {formatCurrency(entry.value, { currency: 'USD' })}
             </span>
           </div>
         ))}
@@ -146,19 +141,17 @@ export default function BalanceChart({
         day: 'numeric',
         ...(timeframe === '1y' && { year: '2-digit' }),
       }),
-      balance_formatted: formatCurrency(point.balance, metrics.currency),
-      income_formatted: formatCurrency(point.income, metrics.currency),
-      expenses_formatted: formatCurrency(point.expenses, metrics.currency),
+      balance_formatted: formatCurrency(point.balance, { currency: metrics.currency }),
+      income_formatted: formatCurrency(point.income, { currency: metrics.currency }),
+      expenses_formatted: formatCurrency(point.expenses, { currency: metrics.currency }),
     }))
   }, [data, metrics.currency, timeframe])
 
   // Calculate trend data
   const trendData = useMemo(() => {
     if (data.length < 2) return null
-
     const recent = data[data.length - 1]
     const previous = data[data.length - 2]
-    
     return {
       balance_trend: recent.balance - previous.balance,
       volume_trend: recent.volume - previous.volume,
@@ -170,7 +163,6 @@ export default function BalanceChart({
   const distributionData = useMemo(() => {
     const totalIncome = data.reduce((sum, point) => sum + point.income, 0)
     const totalExpenses = data.reduce((sum, point) => sum + point.expenses, 0)
-    
     return [
       { name: 'Ingresos', value: totalIncome, color: chartColors.success },
       { name: 'Gastos', value: totalExpenses, color: chartColors.danger },
@@ -186,21 +178,18 @@ export default function BalanceChart({
   ) => {
     const Icon = icon || DollarSign
     const isPositive = (change || 0) >= 0
-    
     return (
       <div className="p-4 border rounded-lg">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-muted-foreground">{title}</span>
           <Icon className="w-4 h-4 text-muted-foreground" />
         </div>
-        
         <div className="space-y-1">
           <div className="text-2xl font-bold">
-            {format === 'currency' && formatCurrency(value, metrics.currency)}
+            {format === 'currency' && formatCurrency(value, { currency: metrics.currency })}
             {format === 'number' && formatNumber(value)}
             {format === 'percentage' && formatPercentage(value)}
           </div>
-          
           {change !== undefined && (
             <div className={cn(
               'flex items-center space-x-1 text-sm',
@@ -237,7 +226,7 @@ export default function BalanceChart({
             tick={{ fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => formatCurrency(value, metrics.currency, { compact: true })}
+            tickFormatter={(value) => formatCurrency(value, { currency: metrics.currency, compact: true })}
           />
           <Tooltip content={<CustomTooltip />} />
           <Line
@@ -270,7 +259,6 @@ export default function BalanceChart({
         </LineChart>
       )
     }
-
     if (chartType === 'area') {
       return (
         <AreaChart data={processedData}>
@@ -285,7 +273,7 @@ export default function BalanceChart({
             tick={{ fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value) => formatCurrency(value, metrics.currency, { compact: true })}
+            tickFormatter={(value) => formatCurrency(value, { currency: metrics.currency, compact: true })}
           />
           <Tooltip content={<CustomTooltip />} />
           <Area
@@ -300,7 +288,6 @@ export default function BalanceChart({
         </AreaChart>
       )
     }
-
     // Bar chart
     return (
       <BarChart data={processedData}>
@@ -315,7 +302,7 @@ export default function BalanceChart({
           tick={{ fontSize: 12 }}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => formatCurrency(value, metrics.currency, { compact: true })}
+          tickFormatter={(value) => formatCurrency(value, { currency: metrics.currency, compact: true })}
         />
         <Tooltip content={<CustomTooltip />} />
         <Bar dataKey="income" fill={chartColors.success} name="Ingresos" />
@@ -358,7 +345,6 @@ export default function BalanceChart({
               Última actualización: {new Date(metrics.last_updated).toLocaleString('es-ES')}
             </p>
           </div>
-          
           <div className="flex items-center gap-2">
             {onTimeframeChange && (
               <Select value={timeframe} onValueChange={onTimeframeChange}>
@@ -374,7 +360,6 @@ export default function BalanceChart({
                 </SelectContent>
               </Select>
             )}
-            
             {onRefresh && (
               <Button variant="outline" size="sm" onClick={onRefresh}>
                 <RefreshCw className="w-4 h-4" />
@@ -383,7 +368,6 @@ export default function BalanceChart({
           </div>
         </div>
       </CardHeader>
-
       <CardContent className="space-y-6">
         {/* Metrics Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -394,7 +378,6 @@ export default function BalanceChart({
             'currency',
             DollarSign
           )}
-          
           {renderMetricCard(
             'Ingresos totales',
             metrics.total_income,
@@ -402,7 +385,6 @@ export default function BalanceChart({
             'currency',
             TrendingUp
           )}
-          
           {renderMetricCard(
             'Gastos totales',
             metrics.total_expenses,
@@ -410,7 +392,6 @@ export default function BalanceChart({
             'currency',
             TrendingDown
           )}
-          
           {renderMetricCard(
             'Flujo neto',
             metrics.net_flow,
@@ -419,7 +400,6 @@ export default function BalanceChart({
             Activity
           )}
         </div>
-
         {/* Chart Tabs */}
         <Tabs defaultValue="balance" className="space-y-4">
           <div className="flex items-center justify-between">
@@ -428,7 +408,6 @@ export default function BalanceChart({
               <TabsTrigger value="flow">Flujo de caja</TabsTrigger>
               <TabsTrigger value="distribution">Distribución</TabsTrigger>
             </TabsList>
-            
             <div className="flex items-center gap-2">
               <Select value={chartType} onValueChange={(value: any) => setChartType(value)}>
                 <SelectTrigger className="w-32">
@@ -440,13 +419,11 @@ export default function BalanceChart({
                   <SelectItem value="bar">Barras</SelectItem>
                 </SelectContent>
               </Select>
-              
               <Button variant="outline" size="sm">
                 <Download className="w-4 h-4" />
               </Button>
             </div>
           </div>
-
           <TabsContent value="balance" className="space-y-4">
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -454,7 +431,6 @@ export default function BalanceChart({
               </ResponsiveContainer>
             </div>
           </TabsContent>
-
           <TabsContent value="flow" className="space-y-4">
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -470,7 +446,7 @@ export default function BalanceChart({
                     tick={{ fontSize: 12 }}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => formatCurrency(value, metrics.currency, { compact: true })}
+                    tickFormatter={(value) => formatCurrency(value, { currency: metrics.currency, compact: true })}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="income" fill={chartColors.success} name="Ingresos" />
@@ -480,7 +456,6 @@ export default function BalanceChart({
               </ResponsiveContainer>
             </div>
           </TabsContent>
-
           <TabsContent value="distribution" className="space-y-4">
             <div className="grid md:grid-cols-2 gap-6">
               <div className="h-80">
@@ -501,15 +476,13 @@ export default function BalanceChart({
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number) => [formatCurrency(value, metrics.currency), 'Valor']}
+                      formatter={(value: number) => [formatCurrency(value, { currency: metrics.currency }), 'Valor']}
                     />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              
               <div className="space-y-4">
                 <h3 className="text-sm font-medium">Resumen del período</h3>
-                
                 <div className="space-y-3">
                   <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
                     <div className="flex items-center space-x-2">
@@ -517,20 +490,18 @@ export default function BalanceChart({
                       <span className="text-sm font-medium">Ingresos totales</span>
                     </div>
                     <span className="font-bold">
-                      {formatCurrency(metrics.total_income, metrics.currency)}
+                      {formatCurrency(metrics.total_income, { currency: metrics.currency })}
                     </span>
                   </div>
-                  
                   <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-red-500 rounded-full" />
                       <span className="text-sm font-medium">Gastos totales</span>
                     </div>
                     <span className="font-bold">
-                      {formatCurrency(metrics.total_expenses, metrics.currency)}
+                      {formatCurrency(metrics.total_expenses, { currency: metrics.currency })}
                     </span>
                   </div>
-                  
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                     <div className="flex items-center space-x-2">
                       <div className="w-3 h-3 bg-blue-500 rounded-full" />
@@ -540,10 +511,9 @@ export default function BalanceChart({
                       'font-bold',
                       metrics.net_flow >= 0 ? 'text-green-600' : 'text-red-600'
                     )}>
-                      {formatCurrency(metrics.net_flow, metrics.currency)}
+                      {formatCurrency(metrics.net_flow, { currency: metrics.currency })}
                     </span>
                   </div>
-                  
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center space-x-2">
                       <Info className="w-4 h-4 text-muted-foreground" />
@@ -571,11 +541,9 @@ export default function BalanceChart({
 export const demoBalanceData: BalanceDataPoint[] = Array.from({ length: 30 }, (_, i) => {
   const date = new Date()
   date.setDate(date.getDate() - (29 - i))
-  
   const baseIncome = 5000 + Math.random() * 3000
   const baseExpenses = 2000 + Math.random() * 1500
   const netFlow = baseIncome - baseExpenses
-  
   return {
     date: date.toISOString().split('T')[0],
     timestamp: date.getTime(),

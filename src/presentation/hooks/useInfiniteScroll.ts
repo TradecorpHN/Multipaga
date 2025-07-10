@@ -1,535 +1,376 @@
 // src/presentation/hooks/useInfiniteScroll.ts
 // ──────────────────────────────────────────────────────────────────────────────
-// useInfiniteScroll Hook - Hook para implementar scroll infinito
+// useInfiniteScroll Hook - Gestión de scroll infinito para listas paginadas
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useDebouncedCallback } from './useDebounce'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import { useDebounce } from './useDebounce'
 
 /**
- * Opciones de configuración para el infinite scroll
+ * Opciones para el hook useInfiniteScroll
  */
 interface UseInfiniteScrollOptions {
-  threshold?: number // Distancia en px desde el final para activar la carga
-  rootMargin?: string // Margen para el intersection observer
-  enabled?: boolean // Si el infinite scroll está habilitado
-  hasMore?: boolean // Si hay más elementos para cargar
-  loading?: boolean // Si actualmente se está cargando
-  debounceMs?: number // Tiempo de debounce para evitar llamadas múltiples
-  direction?: 'vertical' | 'horizontal' // Dirección del scroll
-  reverse?: boolean // Si el scroll es en dirección inversa (hacia arriba)
+  /**
+   * Función callback que se ejecuta cuando se alcanza el final del scroll
+   */
+  onLoadMore: () => void | Promise<void>
+  
+  /**
+   * Indica si hay más datos disponibles para cargar
+   */
+  hasMore: boolean
+  
+  /**
+   * Indica si actualmente se están cargando datos
+   */
+  isLoading?: boolean
+  
+  /**
+   * Umbral en píxeles desde el final del scroll para activar la carga
+   * @default 100
+   */
+  threshold?: number
+  
+  /**
+   * Elemento contenedor para el scroll (por defecto window)
+   */
+  scrollContainer?: HTMLElement | null
+  
+  /**
+   * Tiempo de debounce en ms para evitar múltiples llamadas
+   * @default 200
+   */
+  debounceDelay?: number
+  
+  /**
+   * Si está habilitado el scroll infinito
+   * @default true
+   */
+  enabled?: boolean
 }
 
 /**
- * Resultado del hook useInfiniteScroll
+ * Estado del hook useInfiniteScroll
  */
-interface UseInfiniteScrollResult {
-  // Ref para el elemento sentinela que detecta cuando cargar más
-  sentinelRef: React.RefObject<HTMLDivElement>
-  // Ref para el contenedor de scroll (opcional)
-  containerRef: React.RefObject<HTMLDivElement>
-  // Estado del scroll
-  isNearEnd: boolean
-  // Función para resetear el estado
-  reset: () => void
-  // Función para scrollear hasta un elemento específico
-  scrollToTop: () => void
-  scrollToBottom: () => void
-  scrollToElement: (element: HTMLElement) => void
+interface UseInfiniteScrollState {
+  /**
+   * Indica si se está cerca del final del scroll
+   */
+  isNearBottom: boolean
+  
+  /**
+   * Progreso del scroll (0-100)
+   */
+  scrollProgress: number
+  
+  /**
+   * Si el scroll está en la parte superior
+   */
+  isAtTop: boolean
+  
+  /**
+   * Si el scroll está en la parte inferior
+   */
+  isAtBottom: boolean
 }
 
 /**
- * Hook principal para infinite scroll
+ * Acciones del hook useInfiniteScroll
+ */
+interface UseInfiniteScrollActions {
+  /**
+   * Fuerza una verificación del scroll
+   */
+  checkScroll: () => void
+  
+  /**
+   * Resetea el estado del scroll
+   */
+  reset: () => void
+  
+  /**
+   * Scroll a la parte superior
+   */
+  scrollToTop: () => void
+  
+  /**
+   * Scroll a la parte inferior
+   */
+  scrollToBottom: () => void
+}
+
+/**
+ * Hook para implementar scroll infinito en listas
  */
 export function useInfiniteScroll(
-  onLoadMore: () => void | Promise<void>,
-  options: UseInfiniteScrollOptions = {}
-): UseInfiniteScrollResult {
+  options: UseInfiniteScrollOptions
+): UseInfiniteScrollState & UseInfiniteScrollActions {
   const {
-    threshold = 200,
-    rootMargin = '0px',
-    enabled = true,
-    hasMore = true,
-    loading = false,
-    debounceMs = 100,
-    direction = 'vertical',
-    reverse = false
+    onLoadMore,
+    hasMore,
+    isLoading = false,
+    threshold = 100,
+    scrollContainer = null,
+    debounceDelay = 200,
+    enabled = true
   } = options
 
-  const [isNearEnd, setIsNearEnd] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const observerRef = useRef<IntersectionObserver | null>(null)
+  // Referencias
+  const loadingRef = useRef(false)
+  const containerRef = useRef<HTMLElement | Window | null>(null)
 
-  // Debounced load more function
-  const { debouncedCallback: debouncedLoadMore } = useDebouncedCallback(
-    onLoadMore,
-    debounceMs,
-    [onLoadMore]
-  )
+  // Estado
+  const [isNearBottom, setIsNearBottom] = useState(false)
+  const [scrollProgress, setScrollProgress] = useState(0)
+  const [isAtTop, setIsAtTop] = useState(true)
+  const [isAtBottom, setIsAtBottom] = useState(false)
+  const [shouldCheck, setShouldCheck] = useState(0)
 
-  // Callback para el intersection observer
-  const handleIntersection = useCallback((entries: IntersectionObserverEntry[]) => {
-    const [entry] = entries
-    
-    if (entry.isIntersecting && enabled && hasMore && !loading) {
-      setIsNearEnd(true)
-      debouncedLoadMore()
-    } else {
-      setIsNearEnd(false)
+  // Debounce para evitar múltiples llamadas
+  const debouncedCheck = useDebounce(shouldCheck, debounceDelay)
+
+  // Función para obtener el elemento scrolleable
+  const getScrollElement = useCallback((): HTMLElement | Window => {
+    if (scrollContainer) {
+      return scrollContainer
     }
-  }, [enabled, hasMore, loading, debouncedLoadMore])
+    return window
+  }, [scrollContainer])
 
-  // Configurar el intersection observer
-  useEffect(() => {
-    if (!sentinelRef.current || !enabled) return
-
-    observerRef.current = new IntersectionObserver(handleIntersection, {
-      root: containerRef.current,
-      rootMargin,
-      threshold: 0.1
-    })
-
-    observerRef.current.observe(sentinelRef.current)
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect()
+  // Función para obtener las dimensiones del scroll
+  const getScrollDimensions = useCallback(() => {
+    const element = getScrollElement()
+    
+    if (element instanceof Window) {
+      return {
+        scrollTop: window.pageYOffset || document.documentElement.scrollTop,
+        scrollHeight: document.documentElement.scrollHeight,
+        clientHeight: window.innerHeight
+      }
+    } else {
+      return {
+        scrollTop: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight
       }
     }
-  }, [handleIntersection, rootMargin, enabled])
+  }, [getScrollElement])
 
-  // Función para resetear el estado
-  const reset = useCallback(() => {
-    setIsNearEnd(false)
-  }, [])
-
-  // Funciones de scroll
-  const scrollToTop = useCallback(() => {
-    const container = containerRef.current || window
-    if (container === window) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } else {
-      container.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }, [])
-
-  const scrollToBottom = useCallback(() => {
-    const container = containerRef.current || window
-    if (container === window) {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
-    } else {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-    }
-  }, [])
-
-  const scrollToElement = useCallback((element: HTMLElement) => {
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [])
-
-  return {
-    sentinelRef,
-    containerRef,
-    isNearEnd,
-    reset,
-    scrollToTop,
-    scrollToBottom,
-    scrollToElement
-  }
-}
-
-/**
- * Hook para infinite scroll basado en posición de scroll
- * Útil cuando no se puede usar intersection observer
- */
-export function useScrollPosition(
-  onLoadMore: () => void | Promise<void>,
-  options: UseInfiniteScrollOptions & {
-    container?: HTMLElement | null
-  } = {}
-): UseInfiniteScrollResult {
-  const {
-    threshold = 200,
-    enabled = true,
-    hasMore = true,
-    loading = false,
-    debounceMs = 100,
-    direction = 'vertical',
-    container
-  } = options
-
-  const [isNearEnd, setIsNearEnd] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Debounced load more function
-  const { debouncedCallback: debouncedLoadMore } = useDebouncedCallback(
-    onLoadMore,
-    debounceMs,
-    [onLoadMore]
-  )
-
-  // Función para verificar si estamos cerca del final
+  // Función para verificar la posición del scroll
   const checkScrollPosition = useCallback(() => {
-    if (!enabled || !hasMore || loading) {
-      setIsNearEnd(false)
+    if (!enabled || !hasMore || isLoading || loadingRef.current) {
       return
     }
 
-    const element = container || containerRef.current || window
-    let scrollTop: number
-    let scrollHeight: number
-    let clientHeight: number
+    const { scrollTop, scrollHeight, clientHeight } = getScrollDimensions()
+    
+    // Calcular progreso
+    const totalScrollable = scrollHeight - clientHeight
+    const progress = totalScrollable > 0 ? (scrollTop / totalScrollable) * 100 : 0
+    setScrollProgress(Math.min(100, Math.max(0, progress)))
+    
+    // Verificar si está arriba
+    setIsAtTop(scrollTop <= 10)
+    
+    // Verificar si está abajo
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+    const nearBottom = distanceFromBottom <= threshold
+    setIsNearBottom(nearBottom)
+    setIsAtBottom(distanceFromBottom <= 10)
+    
+    // Cargar más si es necesario
+    if (nearBottom && hasMore && !isLoading && !loadingRef.current) {
+      loadingRef.current = true
+      
+      Promise.resolve(onLoadMore()).finally(() => {
+        loadingRef.current = false
+      })
+    }
+  }, [enabled, hasMore, isLoading, threshold, getScrollDimensions, onLoadMore])
 
-    if (element === window) {
-      scrollTop = window.pageYOffset || document.documentElement.scrollTop
-      scrollHeight = document.documentElement.scrollHeight
-      clientHeight = window.innerHeight
+  // Función pública para verificar scroll
+  const checkScroll = useCallback(() => {
+    setShouldCheck(prev => prev + 1)
+  }, [])
+
+  // Función para resetear estado
+  const reset = useCallback(() => {
+    setIsNearBottom(false)
+    setScrollProgress(0)
+    setIsAtTop(true)
+    setIsAtBottom(false)
+    loadingRef.current = false
+  }, [])
+
+  // Función para scroll al inicio
+  const scrollToTop = useCallback(() => {
+    const element = getScrollElement()
+    
+    if (element instanceof Window) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
-      const el = element as HTMLElement
-      scrollTop = el.scrollTop
-      scrollHeight = el.scrollHeight
-      clientHeight = el.clientHeight
+      element.scrollTo({ top: 0, behavior: 'smooth' })
     }
+  }, [getScrollElement])
 
-    const distanceToBottom = scrollHeight - (scrollTop + clientHeight)
-    const nearEnd = distanceToBottom <= threshold
-
-    setIsNearEnd(nearEnd)
-
-    if (nearEnd) {
-      debouncedLoadMore()
+  // Función para scroll al final
+  const scrollToBottom = useCallback(() => {
+    const element = getScrollElement()
+    
+    if (element instanceof Window) {
+      window.scrollTo({ 
+        top: document.documentElement.scrollHeight, 
+        behavior: 'smooth' 
+      })
+    } else {
+      element.scrollTo({ 
+        top: element.scrollHeight, 
+        behavior: 'smooth' 
+      })
     }
-  }, [enabled, hasMore, loading, threshold, container, debouncedLoadMore])
+  }, [getScrollElement])
 
-  // Agregar event listener para scroll
+  // Efecto para configurar el contenedor
+  useEffect(() => {
+    containerRef.current = getScrollElement()
+  }, [getScrollElement])
+
+  // Efecto para verificar cuando cambia el debounce
+  useEffect(() => {
+    if (debouncedCheck > 0) {
+      checkScrollPosition()
+    }
+  }, [debouncedCheck, checkScrollPosition])
+
+  // Efecto principal para el listener del scroll
   useEffect(() => {
     if (!enabled) return
 
-    const element = container || containerRef.current || window
-    
-    element.addEventListener('scroll', checkScrollPosition, { passive: true })
-    
+    const element = containerRef.current
+    if (!element) return
+
+    // Handler del scroll
+    const handleScroll = () => {
+      checkScroll()
+    }
+
+    // Añadir listener
+    element.addEventListener('scroll', handleScroll, { passive: true })
+
     // Verificar posición inicial
     checkScrollPosition()
 
+    // Cleanup
     return () => {
-      element.removeEventListener('scroll', checkScrollPosition)
+      element.removeEventListener('scroll', handleScroll)
     }
-  }, [checkScrollPosition, enabled, container])
+  }, [enabled, checkScroll, checkScrollPosition])
 
-  const reset = useCallback(() => {
-    setIsNearEnd(false)
-  }, [])
-
-  const scrollToTop = useCallback(() => {
-    const element = container || containerRef.current || window
-    if (element === window) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } else {
-      (element as HTMLElement).scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }, [container])
-
-  const scrollToBottom = useCallback(() => {
-    const element = container || containerRef.current || window
-    if (element === window) {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
-    } else {
-      const el = element as HTMLElement
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-    }
-  }, [container])
-
-  const scrollToElement = useCallback((element: HTMLElement) => {
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [])
-
-  return {
-    sentinelRef,
-    containerRef,
-    isNearEnd,
-    reset,
-    scrollToTop,
-    scrollToBottom,
-    scrollToElement
-  }
-}
-
-/**
- * Hook para infinite scroll bidireccional
- * Permite cargar contenido tanto al llegar al final como al principio
- */
-export function useBidirectionalInfiniteScroll(
-  onLoadMore: () => void | Promise<void>,
-  onLoadPrevious: () => void | Promise<void>,
-  options: UseInfiniteScrollOptions & {
-    hasMorePrevious?: boolean
-    loadingPrevious?: boolean
-  } = {}
-): UseInfiniteScrollResult & {
-  topSentinelRef: React.RefObject<HTMLDivElement>
-  isNearTop: boolean
-} {
-  const {
-    threshold = 200,
-    enabled = true,
-    hasMore = true,
-    hasMorePrevious = true,
-    loading = false,
-    loadingPrevious = false,
-    debounceMs = 100
-  } = options
-
-  const [isNearEnd, setIsNearEnd] = useState(false)
-  const [isNearTop, setIsNearTop] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const topSentinelRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Debounced functions
-  const { debouncedCallback: debouncedLoadMore } = useDebouncedCallback(
-    onLoadMore,
-    debounceMs,
-    [onLoadMore]
-  )
-
-  const { debouncedCallback: debouncedLoadPrevious } = useDebouncedCallback(
-    onLoadPrevious,
-    debounceMs,
-    [onLoadPrevious]
-  )
-
-  // Bottom intersection observer
-  const handleBottomIntersection = useCallback((entries: IntersectionObserverEntry[]) => {
-    const [entry] = entries
-    
-    if (entry.isIntersecting && enabled && hasMore && !loading) {
-      setIsNearEnd(true)
-      debouncedLoadMore()
-    } else {
-      setIsNearEnd(false)
-    }
-  }, [enabled, hasMore, loading, debouncedLoadMore])
-
-  // Top intersection observer
-  const handleTopIntersection = useCallback((entries: IntersectionObserverEntry[]) => {
-    const [entry] = entries
-    
-    if (entry.isIntersecting && enabled && hasMorePrevious && !loadingPrevious) {
-      setIsNearTop(true)
-      debouncedLoadPrevious()
-    } else {
-      setIsNearTop(false)
-    }
-  }, [enabled, hasMorePrevious, loadingPrevious, debouncedLoadPrevious])
-
-  // Setup intersection observers
+  // Re-verificar cuando cambian las props importantes
   useEffect(() => {
-    if (!enabled) return
-
-    const observers: IntersectionObserver[] = []
-
-    // Bottom observer
-    if (sentinelRef.current) {
-      const bottomObserver = new IntersectionObserver(handleBottomIntersection, {
-        root: containerRef.current,
-        rootMargin: '0px',
-        threshold: 0.1
-      })
-      bottomObserver.observe(sentinelRef.current)
-      observers.push(bottomObserver)
-    }
-
-    // Top observer
-    if (topSentinelRef.current) {
-      const topObserver = new IntersectionObserver(handleTopIntersection, {
-        root: containerRef.current,
-        rootMargin: '0px',
-        threshold: 0.1
-      })
-      topObserver.observe(topSentinelRef.current)
-      observers.push(topObserver)
-    }
-
-    return () => {
-      observers.forEach(observer => observer.disconnect())
-    }
-  }, [handleBottomIntersection, handleTopIntersection, enabled])
-
-  const reset = useCallback(() => {
-    setIsNearEnd(false)
-    setIsNearTop(false)
-  }, [])
-
-  const scrollToTop = useCallback(() => {
-    const container = containerRef.current || window
-    if (container === window) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } else {
-      container.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-  }, [])
-
-  const scrollToBottom = useCallback(() => {
-    const container = containerRef.current || window
-    if (container === window) {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
-    } else {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-    }
-  }, [])
-
-  const scrollToElement = useCallback((element: HTMLElement) => {
-    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [])
+    checkScrollPosition()
+  }, [hasMore, isLoading, checkScrollPosition])
 
   return {
-    sentinelRef,
-    topSentinelRef,
-    containerRef,
-    isNearEnd,
-    isNearTop,
+    // Estado
+    isNearBottom,
+    scrollProgress,
+    isAtTop,
+    isAtBottom,
+    
+    // Acciones
+    checkScroll,
     reset,
     scrollToTop,
-    scrollToBottom,
-    scrollToElement
+    scrollToBottom
   }
 }
 
 /**
- * Hook para manejar scroll virtual (virtualized list)
- * Útil para listas muy grandes donde se necesita renderizado virtual
+ * Hook para usar con componentes virtualizados
  */
-export function useVirtualScroll<T>(
+export function useVirtualInfiniteScroll<T>(
   items: T[],
-  itemHeight: number,
-  containerHeight: number,
   options: {
-    overscan?: number // Número de elementos extra a renderizar fuera del viewport
-    onLoadMore?: () => void
-    hasMore?: boolean
-    loading?: boolean
-  } = {}
+    itemHeight: number
+    containerHeight: number
+    overscan?: number
+    onLoadMore: () => void | Promise<void>
+    hasMore: boolean
+    isLoading?: boolean
+  }
 ) {
   const {
+    itemHeight,
+    containerHeight,
     overscan = 5,
     onLoadMore,
-    hasMore = false,
-    loading = false
+    hasMore,
+    isLoading = false
   } = options
 
   const [scrollTop, setScrollTop] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
 
-  // Calcular qué elementos son visibles
-  const visibleRange = useMemo(() => {
-    const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan)
-    const endIndex = Math.min(
-      items.length - 1,
-      Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan
-    )
+  // Calcular índices visibles
+  const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan)
+  const endIndex = Math.min(
+    items.length - 1,
+    Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan
+  )
 
-    return { startIndex, endIndex }
-  }, [scrollTop, itemHeight, containerHeight, overscan, items.length])
+  const visibleItems = items.slice(startIndex, endIndex + 1)
+  const totalHeight = items.length * itemHeight
 
-  // Elementos visibles
-  const visibleItems = useMemo(() => {
-    return items.slice(visibleRange.startIndex, visibleRange.endIndex + 1).map((item, index) => ({
-      item,
-      index: visibleRange.startIndex + index,
-      style: {
-        position: 'absolute' as const,
-        top: (visibleRange.startIndex + index) * itemHeight,
-        height: itemHeight,
-        width: '100%'
-      }
-    }))
-  }, [items, visibleRange, itemHeight])
+  // Verificar si necesita cargar más
+  useEffect(() => {
+    const lastVisibleIndex = Math.floor((scrollTop + containerHeight) / itemHeight)
+    const nearEnd = lastVisibleIndex >= items.length - 10
 
-  // Manejar scroll
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const newScrollTop = event.currentTarget.scrollTop
-    setScrollTop(newScrollTop)
-
-    // Verificar si necesitamos cargar más elementos
-    if (onLoadMore && hasMore && !loading) {
-      const scrollBottom = newScrollTop + containerHeight
-      const totalHeight = items.length * itemHeight
-      
-      if (scrollBottom >= totalHeight - itemHeight * 5) { // Cargar cuando quedan 5 elementos
-        onLoadMore()
-      }
+    if (nearEnd && hasMore && !isLoading) {
+      onLoadMore()
     }
-  }, [onLoadMore, hasMore, loading, containerHeight, itemHeight, items.length])
+  }, [scrollTop, containerHeight, itemHeight, items.length, hasMore, isLoading, onLoadMore])
 
-  // Función para scrollear a un índice específico
-  const scrollToIndex = useCallback((index: number) => {
-    if (containerRef.current) {
-      const targetScrollTop = index * itemHeight
-      containerRef.current.scrollTop = targetScrollTop
-      setScrollTop(targetScrollTop)
-    }
-  }, [itemHeight])
+  const handleScroll = useCallback((e: React.UIEvent<HTMLElement>) => {
+    const target = e.target as HTMLElement
+    setScrollTop(target.scrollTop)
+  }, [])
 
   return {
-    containerRef,
     visibleItems,
-    totalHeight: items.length * itemHeight,
+    totalHeight,
+    startIndex,
     handleScroll,
-    scrollToIndex,
-    visibleRange
+    offsetY: startIndex * itemHeight
   }
 }
 
 /**
  * Hook para detectar dirección del scroll
  */
-export function useScrollDirection(threshold: number = 0) {
+export function useScrollDirection() {
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(null)
-  const [isScrolling, setIsScrolling] = useState(false)
-  const lastScrollTop = useRef(0)
-  const scrollTimeout = useRef<NodeJS.Timeout>()
+  const [lastScrollTop, setLastScrollTop] = useState(0)
 
   useEffect(() => {
     const handleScroll = () => {
-      const currentScrollTop = window.pageYOffset || document.documentElement.scrollTop
-      
-      setIsScrolling(true)
-      
-      if (Math.abs(currentScrollTop - lastScrollTop.current) > threshold) {
-        if (currentScrollTop > lastScrollTop.current) {
-          setScrollDirection('down')
-        } else {
-          setScrollDirection('up')
-        }
-        lastScrollTop.current = currentScrollTop
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+
+      if (scrollTop > lastScrollTop && scrollTop > 100) {
+        setScrollDirection('down')
+      } else if (scrollTop < lastScrollTop) {
+        setScrollDirection('up')
       }
 
-      // Resetear isScrolling después de un tiempo sin scroll
-      if (scrollTimeout.current) {
-        clearTimeout(scrollTimeout.current)
-      }
-      
-      scrollTimeout.current = setTimeout(() => {
-        setIsScrolling(false)
-      }, 150)
+      setLastScrollTop(scrollTop <= 0 ? 0 : scrollTop)
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true })
-    
+
     return () => {
       window.removeEventListener('scroll', handleScroll)
-      if (scrollTimeout.current) {
-        clearTimeout(scrollTimeout.current)
-      }
     }
-  }, [threshold])
+  }, [lastScrollTop])
 
-  return {
-    scrollDirection,
-    isScrolling
-  }
+  return scrollDirection
 }
-
-export default useInfiniteScroll

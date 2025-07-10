@@ -15,6 +15,9 @@ export interface HyperswitchError {
   type?: string
 }
 
+// Tipo para merchant account (¡ahora exportado correctamente!)
+export type MerchantAccount = { merchant_id: string, profile_id?: string}
+
 // Cliente de Hyperswitch
 export class HyperswitchClient {
   private baseUrl: string
@@ -30,17 +33,13 @@ export class HyperswitchClient {
     if (this.apiKey) {
       return this.apiKey
     }
-
-    // En el servidor, intentar obtener de cookies
     try {
       const cookieStore = cookies()
       const sessionToken = cookieStore.get('session_token')?.value
-      
       if (sessionToken) {
         const { verify } = await import('jsonwebtoken')
         const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-for-dev'
         const decoded = verify(sessionToken, jwtSecret) as any
-        
         if (decoded.api_key) {
           return decoded.api_key
         }
@@ -48,24 +47,26 @@ export class HyperswitchClient {
     } catch (error) {
       console.warn('No se pudo obtener API key de la sesión:', error)
     }
-
     throw new Error('API key no disponible')
   }
 
-  // Realizar petición HTTP a Hyperswitch
+  // Realizar petición HTTP a Hyperswitch (con timeout seguro)
   private async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const apiKey = await this.getApiKey()
-    
     const url = `${this.baseUrl}${endpoint}`
-    
+
     const defaultHeaders = {
       'Content-Type': 'application/json',
       'api-key': apiKey,
       'User-Agent': 'TradecorpHN-Multipaga/1.0.0',
     }
+
+    // Timeout avanzado con AbortController
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), hyperswitchConfig.timeout)
 
     const requestOptions: RequestInit = {
       ...options,
@@ -73,12 +74,12 @@ export class HyperswitchClient {
         ...defaultHeaders,
         ...options.headers,
       },
-      timeout: hyperswitchConfig.timeout,
+      signal: controller.signal,
     }
 
     try {
       const response = await fetch(url, requestOptions)
-      
+      clearTimeout(timeout)
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         const error: HyperswitchError = {
@@ -89,17 +90,15 @@ export class HyperswitchClient {
         }
         throw error
       }
-
       return await response.json()
     } catch (error) {
+      clearTimeout(timeout)
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('Timeout: La petición a Hyperswitch tardó demasiado')
       }
-      
       if (typeof error === 'object' && error !== null && 'status_code' in error) {
         throw error // Re-lanzar errores de Hyperswitch
       }
-      
       throw new Error(`Error de conexión con Hyperswitch: ${error}`)
     }
   }
@@ -170,7 +169,6 @@ export class HyperswitchClient {
 
   async listDisputes(params?: any) {
     const searchParams = new URLSearchParams()
-    
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -178,10 +176,8 @@ export class HyperswitchClient {
         }
       })
     }
-
     const query = searchParams.toString()
     const endpoint = query ? `/disputes/list?${query}` : '/disputes/list'
-    
     return this.makeRequest(endpoint)
   }
 
@@ -233,8 +229,8 @@ export class HyperswitchClient {
   }
 
   // Métodos para Account/Merchant
-  async getMerchantAccount() {
-    return this.makeRequest('/account')
+  async getMerchantAccount(): Promise<MerchantAccount> {
+    return this.makeRequest<MerchantAccount>('/account')
   }
 
   async getBusinessProfile(profileId: string) {
@@ -252,11 +248,28 @@ export class HyperswitchClient {
     const account = await this.getMerchantAccount()
     return this.makeRequest(`/account/${account.merchant_id}/connectors/${connectorId}`)
   }
+async createConnector(connectorData: any) {
+  return this.makeRequest('/connectors', {
+    method: 'POST',
+    body: JSON.stringify(connectorData),
+  })
+}
 
+async updateConnector(connectorId: string, data: any) {
+  return this.makeRequest(`/connectors/${connectorId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  })
+}
+
+async deleteConnector(connectorId: string) {
+  return this.makeRequest(`/connectors/${connectorId}`, {
+    method: 'DELETE',
+  })
+}
   // Métodos para Analytics/Reports
   async getPaymentAnalytics(params?: any) {
     const searchParams = new URLSearchParams()
-    
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
@@ -264,10 +277,8 @@ export class HyperswitchClient {
         }
       })
     }
-
     const query = searchParams.toString()
     const endpoint = query ? `/analytics/v1/payments?${query}` : '/analytics/v1/payments'
-    
     return this.makeRequest(endpoint)
   }
 
@@ -332,7 +343,6 @@ export function formatPaymentStatus(status: string): string {
     'partially_captured': 'Parcialmente Capturado',
     'partially_captured_and_capturable': 'Parcialmente Capturado y Capturable',
   }
-  
   return statusMap[status] || status
 }
 
@@ -346,7 +356,6 @@ export function formatDisputeStatus(status: string): string {
     'dispute_won': 'Disputa Ganada',
     'dispute_lost': 'Disputa Perdida',
   }
-  
   return statusMap[status] || status
 }
 
@@ -370,11 +379,9 @@ export function getErrorMessage(error: any): string {
       return error.message
     }
   }
-  
   if (typeof error === 'string') {
     return error
   }
-  
   return 'Error desconocido'
 }
 
@@ -383,3 +390,4 @@ export function isHyperswitchError(error: any): error is HyperswitchError {
          error !== null && 
          'status_code' in error
 }
+

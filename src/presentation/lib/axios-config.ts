@@ -3,17 +3,17 @@
 // Axios Configuration - Configuración de cliente HTTP para Hyperswitch API
 // ──────────────────────────────────────────────────────────────────────────────
 
-import axios, { 
-  AxiosInstance, 
-  AxiosRequestConfig, 
-  AxiosResponse, 
+import axios, {
+  AxiosInstance,
+  AxiosRequestConfig,
+  AxiosResponse,
   AxiosError,
   InternalAxiosRequestConfig
 } from 'axios'
 import { API_ENDPOINTS, TIMEOUTS, ERROR_MESSAGES } from './constants'
 
 /**
- * Tipos para configuración de request
+ * Tipos para configuración de request extendido
  */
 export interface MultipagaRequestConfig extends AxiosRequestConfig {
   merchantId?: string
@@ -95,23 +95,12 @@ hyperswitchApi.interceptors.request.use(
     if (apiKey && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${apiKey}`
     }
-
     // Añadir headers de contexto merchant
     const merchantId = getMerchantId()
     const profileId = getProfileId()
-    
-    if (merchantId) {
-      config.headers['X-Merchant-Id'] = merchantId
-    }
-    
-    if (profileId) {
-      config.headers['X-Profile-Id'] = profileId
-    }
-
-    // Añadir timestamp para debugging
+    if (merchantId) config.headers['X-Merchant-Id'] = merchantId
+    if (profileId) config.headers['X-Profile-Id'] = profileId
     config.headers['X-Request-Timestamp'] = new Date().toISOString()
-
-    // Logging en desarrollo
     if (process.env.NODE_ENV === 'development') {
       console.log('🚀 Request:', {
         method: config.method?.toUpperCase(),
@@ -120,7 +109,6 @@ hyperswitchApi.interceptors.request.use(
         data: config.data
       })
     }
-
     return config
   },
   (error: AxiosError): Promise<AxiosError> => {
@@ -139,16 +127,9 @@ internalApi.interceptors.request.use(
     if (sessionToken && !config.headers.Authorization) {
       config.headers.Authorization = `Bearer ${sessionToken}`
     }
-
-    // Añadir contexto del usuario
     const userId = getUserId()
-    if (userId) {
-      config.headers['X-User-Id'] = userId
-    }
-
-    // Request ID único para tracking
+    if (userId) config.headers['X-User-Id'] = userId
     config.headers['X-Request-Id'] = generateRequestId()
-
     return config
   },
   (error: AxiosError): Promise<AxiosError> => {
@@ -161,7 +142,6 @@ internalApi.interceptors.request.use(
  */
 const createResponseInterceptor = (apiName: string) => ({
   onFulfilled: (response: AxiosResponse): AxiosResponse => {
-    // Logging en desarrollo
     if (process.env.NODE_ENV === 'development') {
       console.log(`✅ ${apiName} Response:`, {
         status: response.status,
@@ -169,21 +149,23 @@ const createResponseInterceptor = (apiName: string) => ({
         headers: response.headers
       })
     }
-
     return response
   },
   onRejected: async (error: AxiosError): Promise<never> => {
     console.error(`❌ ${apiName} Error:`, error)
 
+    // Cast para acceder a tus props personalizadas
+    const config = error.config as MultipagaRequestConfig
+
     // Manejo específico de errores de Hyperswitch
     if (error.response?.data) {
       const errorData = error.response.data as HyperswitchErrorResponse
-      
+
       // Si es error de autenticación, intentar refrescar token
-      if (error.response.status === 401 && !error.config?.retryCount) {
+      if (error.response.status === 401 && !config.retryCount) {
         const refreshed = await attemptTokenRefresh()
         if (refreshed && error.config) {
-          error.config.retryCount = (error.config.retryCount || 0) + 1
+          config.retryCount = (config.retryCount || 0) + 1
           return axios.request(error.config)
         }
       }
@@ -191,7 +173,11 @@ const createResponseInterceptor = (apiName: string) => ({
       // Si es error de rate limiting, añadir delay
       if (error.response.status === 429) {
         const retryAfter = error.response.headers['retry-after']
-        if (retryAfter && error.config && !error.config.skipAuthRefresh) {
+        if (
+          retryAfter &&
+          error.config &&
+          !config.skipAuthRefresh
+        ) {
           await delay(parseInt(retryAfter) * 1000)
           return axios.request(error.config)
         }
@@ -205,7 +191,6 @@ const createResponseInterceptor = (apiName: string) => ({
         errorData.error?.type,
         errorData.error?.metadata
       )
-
       throw customError
     }
 
@@ -269,78 +254,34 @@ export class MultipagaApiError extends Error {
     this.type = type
     this.metadata = metadata
     this.timestamp = new Date().toISOString()
-
-    // Mantener el stack trace
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, MultipagaApiError)
     }
   }
 
-  /**
-   * Verifica si es un error de autenticación
-   */
   public isAuthError(): boolean {
     return this.status === 401 || this.status === 403
   }
-
-  /**
-   * Verifica si es un error de validación
-   */
   public isValidationError(): boolean {
     return this.status === 400 || this.type === 'validation_error'
   }
-
-  /**
-   * Verifica si es un error de rate limiting
-   */
   public isRateLimitError(): boolean {
     return this.status === 429
   }
-
-  /**
-   * Verifica si es un error de red
-   */
   public isNetworkError(): boolean {
     return this.status === 0 || this.code === 'NETWORK_ERROR' || this.code === 'ECONNABORTED'
   }
-
-  /**
-   * Verifica si es un error del servidor
-   */
   public isServerError(): boolean {
     return this.status >= 500
   }
-
-  /**
-   * Obtiene un mensaje legible para el usuario
-   */
   public getUserMessage(): string {
-    if (this.isNetworkError()) {
-      return ERROR_MESSAGES.NETWORK_ERROR
-    }
-
-    if (this.isAuthError()) {
-      return ERROR_MESSAGES.UNAUTHORIZED
-    }
-
-    if (this.isValidationError()) {
-      return ERROR_MESSAGES.VALIDATION_ERROR
-    }
-
-    if (this.isRateLimitError()) {
-      return ERROR_MESSAGES.RATE_LIMITED
-    }
-
-    if (this.isServerError()) {
-      return ERROR_MESSAGES.INTERNAL_ERROR
-    }
-
+    if (this.isNetworkError()) return ERROR_MESSAGES.NETWORK_ERROR
+    if (this.isAuthError()) return ERROR_MESSAGES.UNAUTHORIZED
+    if (this.isValidationError()) return ERROR_MESSAGES.VALIDATION_ERROR
+    if (this.isRateLimitError()) return ERROR_MESSAGES.RATE_LIMITED
+    if (this.isServerError()) return ERROR_MESSAGES.INTERNAL_ERROR
     return this.message || ERROR_MESSAGES.INTERNAL_ERROR
   }
-
-  /**
-   * Serializa el error para logging
-   */
   public toJSON(): object {
     return {
       name: this.name,
@@ -359,42 +300,24 @@ export class MultipagaApiError extends Error {
  * Funciones de utilidad para obtener tokens y contexto
  */
 function getApiKey(): string | null {
-  // En un entorno real, esto vendría de un store seguro o contexto
   return process.env.HYPERSWITCH_API_KEY || null
 }
-
 function getSessionToken(): string | null {
-  // Obtener token de sesión desde localStorage o contexto de auth
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('session_token')
-  }
+  if (typeof window !== 'undefined') return localStorage.getItem('session_token')
   return null
 }
-
 function getMerchantId(): string | null {
-  // Obtener merchant ID desde contexto o sesión
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('merchant_id')
-  }
+  if (typeof window !== 'undefined') return localStorage.getItem('merchant_id')
   return null
 }
-
 function getProfileId(): string | null {
-  // Obtener profile ID desde contexto o sesión
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('profile_id')
-  }
+  if (typeof window !== 'undefined') return localStorage.getItem('profile_id')
   return null
 }
-
 function getUserId(): string | null {
-  // Obtener user ID desde contexto de autenticación
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('user_id')
-  }
+  if (typeof window !== 'undefined') return localStorage.getItem('user_id')
   return null
 }
-
 function generateRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
 }
@@ -404,8 +327,7 @@ function generateRequestId(): string {
  */
 async function attemptTokenRefresh(): Promise<boolean> {
   try {
-    // Implementar lógica de refresh token
-    // Por ahora retornamos false
+    // Implementa tu lógica real de refresh aquí
     return false
   } catch (error) {
     console.error('Failed to refresh token:', error)
@@ -441,9 +363,7 @@ export const createInternalRequest = <T = any>(
 export const setMerchantContext = (merchantId: string, profileId?: string): void => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('merchant_id', merchantId)
-    if (profileId) {
-      localStorage.setItem('profile_id', profileId)
-    }
+    if (profileId) localStorage.setItem('profile_id', profileId)
   }
 }
 
@@ -468,15 +388,12 @@ export const checkApiHealth = async (): Promise<{
   latency: number
 }> => {
   const startTime = Date.now()
-  
   try {
     const [hyperswitchHealth, internalHealth] = await Promise.allSettled([
       hyperswitchApi.get('/health', { timeout: 5000 }),
       internalApi.get('/health', { timeout: 5000 })
     ])
-
     const latency = Date.now() - startTime
-
     return {
       hyperswitch: hyperswitchHealth.status === 'fulfilled',
       internal: internalHealth.status === 'fulfilled',

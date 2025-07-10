@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -37,7 +37,7 @@ import {
   SelectValue,
 } from '@/presentation/components/ui/Select'
 import { Skeleton } from '@/presentation/components/ui/Skeleton'
-import { formatCurrency, formatNumber, formatPercentage } from '@/presentation/lib/formatters'
+import { formatCurrency, formatNumber, formatPercentage } from '@/presentation/components/ui/formatters'
 import { cn } from '@/presentation/lib/utils'
 
 interface Statistic {
@@ -87,7 +87,7 @@ export default function OverviewStats({
   const formatValue = (stat: Statistic) => {
     switch (stat.format) {
       case 'currency':
-        return formatCurrency(Number(stat.value), stat.currency || 'USD')
+        return formatCurrency(Number(stat.value), { currency: stat.currency || 'USD' })
       case 'percentage':
         return formatPercentage(Number(stat.value))
       case 'number':
@@ -273,7 +273,7 @@ export default function OverviewStats({
                         {stat.format === 'percentage' 
                           ? formatPercentage(stat.change)
                           : stat.format === 'currency'
-                          ? formatCurrency(stat.change, stat.currency)
+                          ? formatCurrency(stat.change, { currency: stat.currency || 'USD' })
                           : formatNumber(stat.change)
                         }
                       </span>
@@ -300,7 +300,7 @@ export default function OverviewStats({
                             <span className="text-muted-foreground">{item.period}</span>
                             <span className="font-medium">
                               {stat.format === 'currency' 
-                                ? formatCurrency(item.value, stat.currency)
+                                ? formatCurrency(item.value, { currency: stat.currency || 'USD' })
                                 : formatNumber(item.value)
                               }
                             </span>

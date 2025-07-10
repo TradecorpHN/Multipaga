@@ -1,16 +1,17 @@
-// ==============================================================================
-// PaymentMethods.tsx - Componente para mostrar métodos de pago disponibles
-// ==============================================================================
-
-// /home/kali/multipaga/src/presentation/components/connectors/PaymentMethods.tsx
 'use client'
 
 import React from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
-import { cn } from '@/lib/utils'
-import { 
+import { Badge } from '@/presentation/components/ui/Badge'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '@/presentation/components/ui/Card'
+import { Separator } from '@/presentation/components/ui/Separator'
+import { cn } from '@/presentation/lib/utils'
+import {
   CreditCard,
   Building,
   Smartphone,
@@ -21,7 +22,6 @@ import {
   Shield,
   Clock,
   CheckCircle,
-  Info,
   AlertCircle
 } from 'lucide-react'
 
@@ -47,7 +47,6 @@ interface PaymentMethodsProps {
   className?: string
 }
 
-// Iconos para métodos de pago
 const PAYMENT_METHOD_ICONS: Record<string, any> = {
   card: CreditCard,
   bank_transfer: Building,
@@ -64,7 +63,6 @@ const PAYMENT_METHOD_ICONS: Record<string, any> = {
   qr_code: QrCode,
 }
 
-// Colores para métodos de pago
 const PAYMENT_METHOD_COLORS: Record<string, string> = {
   card: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   bank_transfer: 'bg-green-500/10 text-green-400 border-green-500/20',
@@ -81,7 +79,6 @@ const PAYMENT_METHOD_COLORS: Record<string, string> = {
   qr_code: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
 }
 
-// Formatear nombre del método de pago
 const formatPaymentMethodName = (method: string): string => {
   return method
     .split('_')
@@ -89,7 +86,6 @@ const formatPaymentMethodName = (method: string): string => {
     .join(' ')
 }
 
-// Formatear tipo de método de pago
 const formatPaymentMethodType = (type: string): string => {
   return type
     .split('_')
@@ -97,7 +93,6 @@ const formatPaymentMethodType = (type: string): string => {
     .join(' ')
 }
 
-// Formatear cantidad
 const formatAmount = (amount: number, currency: string = 'USD'): string => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -212,7 +207,6 @@ export function PaymentMethods({
       <CardContent className="space-y-4">
         {paymentMethods.map((pm, index) => {
           const Icon = PAYMENT_METHOD_ICONS[pm.payment_method] || CreditCard
-          
           return (
             <div key={index} className="space-y-3">
               <div className="flex items-center space-x-3">
@@ -233,7 +227,6 @@ export function PaymentMethods({
                   )}
                 </div>
               </div>
-
               {pm.payment_method_types && pm.payment_method_types.length > 0 && (
                 <div className="ml-11 space-y-2">
                   {pm.payment_method_types.map((type, typeIndex) => (
@@ -259,7 +252,6 @@ export function PaymentMethods({
                           </div>
                         )}
                       </div>
-                      
                       {showLimits && (type.minimum_amount || type.maximum_amount) && (
                         <div className="text-xs text-gray-500">
                           {type.minimum_amount && (
@@ -275,7 +267,6 @@ export function PaymentMethods({
                   ))}
                 </div>
               )}
-
               {index < paymentMethods.length - 1 && <Separator />}
             </div>
           )

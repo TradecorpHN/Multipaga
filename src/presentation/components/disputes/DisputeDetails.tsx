@@ -2,19 +2,20 @@
 // DisputeDetails.tsx - Componente para mostrar detalles de una disputa
 // ==============================================================================
 
-// /home/kali/multipaga/src/presentation/components/disputes/DisputeDetails.tsx
 'use client'
 
 import React, { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Progress } from '@/components/ui/progress'
-import { cn, formatCurrency, formatDate } from '@/lib/utils'
-import { 
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Button } from '@/presentation/components/ui/Button'
+import { Separator } from '@/presentation/components/ui/Separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/presentation/components/ui/Tabs'
+import { Alert, AlertDescription, AlertTitle } from '@/presentation/components/ui/Alert'
+import { Progress } from '@/presentation/components/ui/Progress'
+import { cn } from '@/presentation/lib/utils'
+
+import { formatCurrency, formatDate } from '@/presentation/components/ui/formatters'
+import {
   AlertTriangle,
   Clock,
   CheckCircle,
@@ -38,7 +39,7 @@ import {
   Shield,
   Zap
 } from 'lucide-react'
-import { useToast } from '@/components/ui/use-toast'
+import { toast } from 'react-hot-toast'
 
 // Tipos para disputas basados en Hyperswitch
 interface DisputeResponse {
@@ -133,15 +134,20 @@ const DISPUTE_STAGE_CONFIG = {
 }
 
 // Función para copiar al portapapeles
-const copyToClipboard = async (text: string, label: string = 'Text') => {
+const handleCopy = async (text: string, label: string) => {
   try {
     await navigator.clipboard.writeText(text)
-    // Toast notification would be handled by the parent component
-    return true
+    toast.success(`${label} copied to clipboard`)
   } catch (error) {
-    console.error('Failed to copy:', error)
-    return false
+    toast.error('Failed to copy')
   }
+}
+
+const formatFileSize = (bytes: number): string => {
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  if (bytes === 0) return '0 Byte'
+  const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)).toString())
+  return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
 }
 
 export function DisputeDetails({
@@ -152,29 +158,11 @@ export function DisputeDetails({
   onChallengeDispute,
   className
 }: DisputeDetailsProps) {
-  const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('overview')
 
   const statusConfig = DISPUTE_STATUS_CONFIG[dispute.dispute_status]
   const stageConfig = DISPUTE_STAGE_CONFIG[dispute.dispute_stage]
   const StatusIcon = statusConfig.icon
-
-  const handleCopy = async (text: string, label: string) => {
-    const success = await copyToClipboard(text, label)
-    if (success) {
-      toast({
-        title: 'Copied!',
-        description: `${label} copied to clipboard`,
-      })
-    }
-  }
-
-  const formatFileSize = (bytes: number): string => {
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    if (bytes === 0) return '0 Byte'
-    const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)).toString())
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
-  }
 
   const canChallenge = dispute.dispute_status === 'dispute_opened' && 
                       dispute.challenge_required_by && 
@@ -201,7 +189,6 @@ export function DisputeDetails({
               </div>
               <CardDescription>{statusConfig.description}</CardDescription>
             </div>
-            
             <div className="flex items-center space-x-2">
               <Button
                 variant="outline"
@@ -230,7 +217,7 @@ export function DisputeDetails({
             <div className="space-y-1">
               <p className="text-sm text-gray-500">Amount</p>
               <p className="font-medium text-lg">
-                {formatCurrency(parseInt(dispute.amount), dispute.currency)}
+                {formatCurrency(parseInt(dispute.amount), { currency: dispute.currency })}
               </p>
             </div>
             <div className="space-y-1">
@@ -368,7 +355,7 @@ export function DisputeDetails({
                   <div>
                     <p className="text-sm text-gray-500">Amount</p>
                     <p className="font-medium text-lg">
-                      {formatCurrency(parseInt(dispute.amount), dispute.currency)}
+                      {formatCurrency(parseInt(dispute.amount), { currency: dispute.currency })}
                     </p>
                   </div>
                   <div>

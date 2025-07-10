@@ -14,15 +14,13 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  AlertTriangle,
-  Zap,
-  CreditCard,
-  Wallet,
-  Globe,
   BarChart3,
   TrendingUp,
   TrendingDown,
   DollarSign,
+  CreditCard,
+  Wallet,
+  Globe,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/presentation/components/ui/Badge'
@@ -37,7 +35,7 @@ import {
 } from '@/presentation/components/ui/DropdownMenu'
 import { Progress } from '@/presentation/components/ui/Progress'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/presentation/components/ui/Tooltip'
-import { formatCurrency, formatPercentage } from '@/presentation/lib/formatters'
+import { formatCurrency, formatPercentage } from '@/presentation/components/ui/formatters'
 import { cn } from '@/presentation/lib/utils'
 
 // Connector status configuration
@@ -352,7 +350,6 @@ export default function ConnectorCard({
       </CardHeader>
 
       <CardContent className="space-y-4">
-        {/* Business Information */}
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-muted-foreground">País:</span>
@@ -364,7 +361,6 @@ export default function ConnectorCard({
           </div>
         </div>
 
-        {/* Payment Methods */}
         <div>
           <h4 className="text-sm font-medium mb-2">Métodos de pago soportados:</h4>
           <div className="flex flex-wrap gap-1">
@@ -381,7 +377,6 @@ export default function ConnectorCard({
           </div>
         </div>
 
-        {/* Statistics */}
         {connector.stats && variant === 'detailed' && (
           <div className="space-y-3">
             <h4 className="text-sm font-medium">Estadísticas (últimos 30 días):</h4>
@@ -391,7 +386,7 @@ export default function ConnectorCard({
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Volumen total:</span>
                   <span className="text-sm font-medium">
-                    {formatCurrency(connector.stats.volume_30d, connector.stats.currency)}
+                    {formatCurrency(connector.stats.volume_30d, { currency: connector.stats.currency })}
                   </span>
                 </div>
                 
@@ -429,7 +424,6 @@ export default function ConnectorCard({
               </div>
             </div>
 
-            {/* Success Rate Progress */}
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Rendimiento</span>
@@ -448,7 +442,6 @@ export default function ConnectorCard({
               />
             </div>
 
-            {/* Volume Change */}
             {volumeChange !== null && (
               <div className="flex items-center justify-between p-2 bg-muted rounded-lg">
                 <span className="text-sm text-muted-foreground">Cambio últimas 24h:</span>
@@ -470,7 +463,6 @@ export default function ConnectorCard({
           </div>
         )}
 
-        {/* Currencies */}
         <div>
           <h4 className="text-sm font-medium mb-2">Monedas soportadas:</h4>
           <div className="flex flex-wrap gap-1">
@@ -487,7 +479,6 @@ export default function ConnectorCard({
           </div>
         </div>
 
-        {/* Status Description */}
         <div className="p-3 bg-muted rounded-lg">
           <div className="flex items-start space-x-2">
             <StatusIcon className={cn(
@@ -502,7 +493,6 @@ export default function ConnectorCard({
           </div>
         </div>
 
-        {/* Webhook Status */}
         {connector.webhook_details && (
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Webhook configurado:</span>
@@ -516,25 +506,25 @@ export default function ConnectorCard({
 
       <CardFooter className="flex items-center justify-between text-sm text-muted-foreground pt-3">
         <Tooltip>
-          <TooltipTrigger>
+          <TooltipTrigger asChild>
             <span>
               Configurado {new Date(connector.created_at).toLocaleDateString('es-ES')}
             </span>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>{new Date(connector.created_at).toLocaleString('es-ES')}</p>
+          <TooltipContent side="bottom" align="center">
+            <span>{new Date(connector.created_at).toLocaleString('es-ES')}</span>
           </TooltipContent>
         </Tooltip>
 
         {connector.updated_at !== connector.created_at && (
           <Tooltip>
-            <TooltipTrigger>
+            <TooltipTrigger asChild>
               <span>
                 Actualizado {new Date(connector.updated_at).toLocaleDateString('es-ES')}
               </span>
             </TooltipTrigger>
-            <TooltipContent>
-              <p>{new Date(connector.updated_at).toLocaleString('es-ES')}</p>
+            <TooltipContent side="bottom" align="center">
+              <span>{new Date(connector.updated_at).toLocaleString('es-ES')}</span>
             </TooltipContent>
           </Tooltip>
         )}

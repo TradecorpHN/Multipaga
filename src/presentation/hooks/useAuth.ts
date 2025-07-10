@@ -1,9 +1,15 @@
+// src/presentation/hooks/useAuth.ts
+// ──────────────────────────────────────────────────────────────────────────────
+// useAuth Hook - Gestión de autenticación con Hyperswitch
+// ──────────────────────────────────────────────────────────────────────────────
+
 'use client'
 
 import { useState, useEffect, useCallback, useContext, createContext } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
-import type { SessionData } from '@/types/common'
+import { toast } from 'react-hot-toast'
+import type { SessionData } from '../../types/common'
 
 // Tipos para el contexto de autenticación
 interface AuthState {
@@ -20,8 +26,8 @@ interface AuthContextType extends AuthState {
   clearError: () => void
 }
 
-// Crear contexto
-const AuthContext = createContext<AuthContextType | null>(null)
+// Crear contexto con valor por defecto
+const AuthContextInstance = createContext<AuthContextType | null>(null)
 
 // Fetcher para verificar sesión
 const sessionFetcher = async (url: string) => {
@@ -92,10 +98,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Revalidar sesión después del login exitoso
       await mutateSession()
 
+      toast.success('Sesión iniciada exitosamente')
       return { success: true }
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error de conexión'
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Error inesperado al iniciar sesión'
       setError(errorMessage)
       return { success: false, error: errorMessage }
     }
@@ -106,56 +115,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setError(null)
 
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      })
-
-      // Limpiar datos de sesión localmente
-      await mutateSession(undefined, false)
-
-      // Redirigir al login
-      router.push('/login')
-
-    } catch (error) {
-      console.error('Error durante logout:', error)
-      // Incluso si hay error, limpiar sesión local y redirigir
-      await mutateSession(undefined, false)
-      router.push('/login')
-    }
-  }, [mutateSession, router])
-
-  // Función para refrescar sesión
-  const refreshSession = useCallback(async () => {
-    try {
-      setError(null)
-
-      const response = await fetch('/api/auth/refresh', {
+      const response = await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include',
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        
-        if (response.status === 401) {
-          // Token expirado o inválido, redirigir al login
-          await logout()
-          return
-        }
-        
-        throw new Error(errorData.error || 'Error refrescando sesión')
+        throw new Error('Error al cerrar sesión')
       }
 
-      // Revalidar sesión después del refresh exitoso
-      await mutateSession()
+      // Limpiar estado de sesión
+      await mutateSession(null, false)
+
+      toast.success('Sesión cerrada exitosamente')
+      
+      // Redirigir al login
+      router.push('/login')
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Error refrescando sesión'
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Error al cerrar sesión'
+      setError(errorMessage)
+      toast.error(errorMessage)
+    }
+  }, [mutateSession, router])
+
+  // Función para refrescar la sesión
+  const refreshSession = useCallback(async () => {
+    try {
+      await mutateSession()
+      toast.success('Sesión actualizada')
+    } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Error refrescando sesión'
       setError(errorMessage)
       console.error('Error refreshing session:', error)
     }
-  }, [mutateSession, logout])
+  }, [mutateSession])
 
   // Función para limpiar errores
   const clearError = useCallback(() => {
@@ -203,16 +201,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearError,
   }
 
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
-  )
 }
-
 // Hook principal de autenticación
 export function useAuth() {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContextInstance)
   
   if (!context) {
     throw new Error('useAuth debe ser usado dentro de AuthProvider')
@@ -248,7 +240,7 @@ export function useMerchant() {
   }
 }
 
-// Hook para verificar permisos (ejemplo básico)
+// Hook para verificar permisos
 export function usePermissions() {
   const { merchant, isAuthenticated } = useAuth()
   
@@ -264,3 +256,18 @@ export function usePermissions() {
   const canChallengeDisputes = hasPermission('disputes:challenge')
   const canCreatePayments = hasPermission('payments:create')
   const canRefundPayments = hasPermission('payments:refund')
+  const canManageConnectors = hasPermission('connectors:manage')
+  const canViewAnalytics = hasPermission('analytics:read')
+  const canManageWebhooks = hasPermission('webhooks:manage')
+  
+  return {
+    hasPermission,
+    canAccessDisputes,
+    canChallengeDisputes,
+    canCreatePayments,
+    canRefundPayments,
+    canManageConnectors,
+    canViewAnalytics,
+    canManageWebhooks,
+  }
+}

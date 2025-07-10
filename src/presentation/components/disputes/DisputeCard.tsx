@@ -38,7 +38,7 @@ import {
 } from '@/presentation/components/ui/DropdownMenu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/presentation/components/ui/Tooltip'
 import { Progress } from '@/presentation/components/ui/Progress'
-import { formatCurrency } from '@/presentation/lib/formatters'
+import { formatCurrency, formatNumber, formatPercentage } from '@/presentation/components/ui/formatters'
 
 // Dispute status configuration
 const DisputeStatusConfig = {
@@ -238,7 +238,7 @@ export default function DisputeCard({
               }`} />
               <div>
                 <p className="font-medium text-sm">
-                  {formatCurrency(dispute.amount, dispute.currency)}
+                  {formatCurrency(dispute.amount, { currency: dispute.currency })}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {dispute.dispute_id.slice(-8)}
@@ -286,7 +286,7 @@ export default function DisputeCard({
             <div className="flex items-center space-x-2">
               <DollarSign className="w-5 h-5 text-red-600" />
               <span className="text-2xl font-bold">
-                {formatCurrency(dispute.amount, dispute.currency)}
+                {formatCurrency(dispute.amount, { currency: dispute.currency })}
               </span>
               <Badge 
                 variant={dispute.dispute_stage === 'dispute' ? 'destructive' : 'warning'}

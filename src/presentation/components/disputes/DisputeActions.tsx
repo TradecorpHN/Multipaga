@@ -5,23 +5,8 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  Upload,
-  FileText,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Clock,
-  Send,
-  X,
-  Plus,
-  Download,
-  Eye,
-  Calendar,
-  Shield,
-  MessageSquare,
-  Paperclip,
-  Loader2,
-  RefreshCw,
+  Upload, FileText, CheckCircle, XCircle, AlertTriangle, Clock,
+  Send, Eye, Shield, Paperclip, Loader2, RefreshCw,
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
@@ -29,16 +14,8 @@ import { Button } from '@/presentation/components/ui/Button'
 import { Input } from '@/presentation/components/ui/Input'
 import { Label } from '@/presentation/components/ui/Label'
 import { Textarea } from '@/presentation/components/ui/Textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/presentation/components/ui/Select'
 import { Badge } from '@/presentation/components/ui/Badge'
 import { Progress } from '@/presentation/components/ui/Progress'
-import { Separator } from '@/presentation/components/ui/Separator'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,16 +31,24 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/presentation/components/ui/Dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/presentation/components/ui/Tabs'
-import { formatCurrency } from '@/presentation/lib/formatters'
 import { cn } from '@/presentation/lib/utils'
 
-// Evidence submission schema
+// --- Fix: formatCurrency avanzado (ponlo en /formatters.tsx y usa este import aquí) ---
+export function formatCurrency(amount: number, currency: string = 'USD', locales: string | string[] = 'es-HN') {
+  return new Intl.NumberFormat(locales, {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+// ---- Evidence Submission Schema ----
 const evidenceSubmissionSchema = z.object({
   access_activity_log: z.string().optional(),
   billing_address: z.string().optional(),
@@ -97,7 +82,7 @@ const evidenceSubmissionSchema = z.object({
 
 type EvidenceSubmissionData = z.infer<typeof evidenceSubmissionSchema>
 
-// Dispute interface
+// ---- Dispute Interface ----
 interface DisputeResponse {
   dispute_id: string
   payment_id: string
@@ -115,8 +100,20 @@ interface DisputeResponse {
   network_reason_description?: string
 }
 
-// Evidence field configurations
-const EVIDENCE_FIELDS = [
+// ---- Evidence Fields ----
+type EvidenceFieldType = 'textarea' | 'file' | 'text' | 'date'
+
+interface EvidenceField {
+  key: keyof EvidenceSubmissionData
+  label: string
+  description: string
+  category: 'customer' | 'transaction' | 'product' | 'shipping' | 'delivery' | 'policy' | 'other'
+  required: boolean
+  type: EvidenceFieldType
+  placeholder?: string
+}
+
+const EVIDENCE_FIELDS: EvidenceField[] = [
   {
     key: 'customer_communication',
     label: 'Comunicación con el cliente',
@@ -221,8 +218,9 @@ const EVIDENCE_FIELDS = [
     type: 'textarea',
     placeholder: 'Información adicional que pueda ayudar con la disputa...',
   },
-] as const
+]
 
+// ---- Props ----
 interface DisputeActionsProps {
   dispute: DisputeResponse
   onSubmitEvidence?: (evidence: EvidenceSubmissionData) => Promise<void>
@@ -231,6 +229,7 @@ interface DisputeActionsProps {
   className?: string
 }
 
+// ---- Component ----
 export default function DisputeActions({
   dispute,
   onSubmitEvidence,
@@ -247,7 +246,7 @@ export default function DisputeActions({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isValid },
+    formState: { isValid },
   } = useForm<EvidenceSubmissionData>({
     resolver: zodResolver(evidenceSubmissionSchema),
     defaultValues: dispute.evidence || {},
@@ -255,23 +254,25 @@ export default function DisputeActions({
 
   const watchedValues = watch()
 
-  // Calculate evidence completion percentage
-  const evidenceCompletion = EVIDENCE_FIELDS.reduce((acc, field) => {
-    const value = watchedValues[field.key as keyof EvidenceSubmissionData]
-    const hasValue = value && value.toString().trim().length > 0
-    const weight = field.required ? 2 : 1
-    
-    acc.total += weight
-    if (hasValue) acc.completed += weight
-    
-    return acc
-  }, { completed: 0, total: 0 })
+  // ---- Completion Percentage ----
+  const evidenceCompletion = EVIDENCE_FIELDS.reduce(
+    (acc, field) => {
+      const value = watchedValues[field.key]
+      const hasValue = value && value.toString().trim().length > 0
+      const weight = field.required ? 2 : 1
+      acc.total += weight
+      if (hasValue) acc.completed += weight
+      return acc
+    },
+    { completed: 0, total: 0 }
+  )
 
-  const completionPercentage = evidenceCompletion.total > 0 
-    ? Math.round((evidenceCompletion.completed / evidenceCompletion.total) * 100) 
-    : 0
+  const completionPercentage =
+    evidenceCompletion.total > 0
+      ? Math.round((evidenceCompletion.completed / evidenceCompletion.total) * 100)
+      : 0
 
-  // Get days until deadline
+  // ---- Deadline ----
   const getDaysUntilDeadline = () => {
     if (!dispute.evidence_due_by) return null
     const deadline = new Date(dispute.evidence_due_by)
@@ -284,19 +285,19 @@ export default function DisputeActions({
   const daysUntilDeadline = getDaysUntilDeadline()
   const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 3
 
-  const handleFileUpload = useCallback((fieldKey: string, file: File) => {
-    setUploadedFiles(prev => ({ ...prev, [fieldKey]: file }))
-    
-    // Simulate file upload and set the URL
-    const mockUrl = `https://evidence.multipaga.com/${file.name}`
-    setValue(fieldKey as keyof EvidenceSubmissionData, mockUrl)
-    
-    toast.success(`Archivo ${file.name} subido exitosamente`)
-  }, [setValue])
+  // ---- File Upload ----
+  const handleFileUpload = useCallback(
+    (fieldKey: string, file: File) => {
+      setUploadedFiles((prev) => ({ ...prev, [fieldKey]: file }))
+      const mockUrl = `https://evidence.multipaga.com/${file.name}`
+      setValue(fieldKey as keyof EvidenceSubmissionData, mockUrl)
+      toast.success(`Archivo ${file.name} subido exitosamente`)
+    },
+    [setValue]
+  )
 
   const handleSubmitEvidence = async (data: EvidenceSubmissionData) => {
     if (!onSubmitEvidence) return
-
     setIsSubmitting(true)
     try {
       await onSubmitEvidence(data)
@@ -311,7 +312,6 @@ export default function DisputeActions({
 
   const handleAcceptDispute = async () => {
     if (!onAcceptDispute) return
-
     setIsSubmitting(true)
     try {
       await onAcceptDispute()
@@ -323,24 +323,23 @@ export default function DisputeActions({
     }
   }
 
-  const renderEvidenceField = (field: typeof EVIDENCE_FIELDS[0]) => {
-    const value = watchedValues[field.key as keyof EvidenceSubmissionData] || ''
+  // ---- Render Field (discriminated) ----
+  const renderEvidenceField = (field: EvidenceField) => {
+    const value = watchedValues[field.key] || ''
     const hasValue = value && value.toString().trim().length > 0
 
     return (
-      <div key={field.key} className="space-y-2">
+      <div key={String(field.key)} className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor={field.key} className="text-sm font-medium">
+          <Label htmlFor={String(field.key)} className="text-sm font-medium">
             {field.label}
             {field.required && <span className="text-destructive ml-1">*</span>}
           </Label>
           {hasValue && <CheckCircle className="w-4 h-4 text-green-600" />}
         </div>
-        
         <p className="text-xs text-muted-foreground">{field.description}</p>
-
         <Controller
-          name={field.key as keyof EvidenceSubmissionData}
+          name={field.key}
           control={control}
           render={({ field: formField }) => {
             switch (field.type) {
@@ -353,7 +352,6 @@ export default function DisputeActions({
                     className="min-h-[80px]"
                   />
                 )
-              
               case 'file':
                 return (
                   <div className="space-y-2">
@@ -370,7 +368,6 @@ export default function DisputeActions({
                         className="hidden"
                         id={`file-${field.key}`}
                       />
-                      
                       <Label
                         htmlFor={`file-${field.key}`}
                         className="cursor-pointer inline-flex items-center space-x-2 px-3 py-2 border border-input rounded-md hover:bg-accent hover:text-accent-foreground"
@@ -378,7 +375,6 @@ export default function DisputeActions({
                         <Upload className="w-4 h-4" />
                         <span>Subir archivo</span>
                       </Label>
-                      
                       {hasValue && (
                         <div className="flex items-center space-x-2 text-sm text-green-600">
                           <Paperclip className="w-3 h-3" />
@@ -386,7 +382,6 @@ export default function DisputeActions({
                         </div>
                       )}
                     </div>
-                    
                     {uploadedFiles[field.key] && (
                       <p className="text-xs text-muted-foreground">
                         {uploadedFiles[field.key].name} ({Math.round(uploadedFiles[field.key].size / 1024)} KB)
@@ -394,15 +389,8 @@ export default function DisputeActions({
                     )}
                   </div>
                 )
-              
               case 'date':
-                return (
-                  <Input
-                    {...formField}
-                    type="date"
-                  />
-                )
-              
+                return <Input {...formField} type="date" />
               default:
                 return (
                   <Input
@@ -422,7 +410,6 @@ export default function DisputeActions({
 
   return (
     <div className={cn('space-y-6', className)}>
-      {/* Status Overview */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -438,14 +425,12 @@ export default function DisputeActions({
                 {formatCurrency(dispute.amount, dispute.currency)}
               </p>
             </div>
-            
             <div>
               <p className="text-sm text-muted-foreground">Estado</p>
               <Badge variant={dispute.dispute_status === 'dispute_opened' ? 'destructive' : 'secondary'}>
                 {dispute.dispute_status === 'dispute_opened' ? 'Abierta' : 'Cerrada'}
               </Badge>
             </div>
-            
             <div>
               <p className="text-sm text-muted-foreground">Etapa</p>
               <p className="text-lg font-semibold capitalize">
@@ -453,7 +438,6 @@ export default function DisputeActions({
               </p>
             </div>
           </div>
-
           {dispute.evidence_due_by && (
             <div className={cn(
               'p-3 rounded-lg border',
@@ -479,7 +463,6 @@ export default function DisputeActions({
                     })}
                   </p>
                 </div>
-                
                 <div className="text-right">
                   <p className={cn(
                     'text-2xl font-bold',
@@ -499,7 +482,6 @@ export default function DisputeActions({
           )}
         </CardContent>
       </Card>
-
       {/* Evidence Progress */}
       {canSubmitEvidence && (
         <Card>
@@ -516,7 +498,6 @@ export default function DisputeActions({
           </CardHeader>
           <CardContent className="space-y-4">
             <Progress value={completionPercentage} className="h-2" />
-            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div className="flex items-center space-x-2">
                 <CheckCircle className="w-4 h-4 text-green-600" />
@@ -524,7 +505,6 @@ export default function DisputeActions({
                   {evidenceCompletion.completed} de {evidenceCompletion.total} campos completados
                 </span>
               </div>
-              
               <div className="flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-yellow-600" />
                 <span>
@@ -535,7 +515,6 @@ export default function DisputeActions({
           </CardContent>
         </Card>
       )}
-
       {/* Actions */}
       <Card>
         <CardHeader>
@@ -558,119 +537,80 @@ export default function DisputeActions({
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Enviar evidencia para disputa</DialogTitle>
-                    <DialogDescription>
-                      Proporciona la documentación necesaria para defender tu posición en esta disputa.
-                      Los campos marcados con * son requeridos.
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  <form onSubmit={handleSubmit(handleSubmitEvidence)} className="space-y-6">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                        <span className="text-sm font-medium">
-                          Progreso de evidencia: {completionPercentage}%
-                        </span>
-                        <Progress value={completionPercentage} className="w-32 h-2" />
+                  <div>
+                    <DialogHeader>
+                      <DialogTitle>Enviar evidencia para disputa</DialogTitle>
+                      <DialogDescription>
+                        Proporciona la documentación necesaria para defender tu posición en esta disputa.
+                        Los campos marcados con * son requeridos.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmit(handleSubmitEvidence)} className="space-y-6">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                          <span className="text-sm font-medium">
+                            Progreso de evidencia: {completionPercentage}%
+                          </span>
+                          <Progress value={completionPercentage} className="w-32 h-2" />
+                        </div>
                       </div>
-                    </div>
-
-                    <Tabs defaultValue="required" className="space-y-4">
-                      <TabsList className="grid w-full grid-cols-4">
-                        <TabsTrigger value="required">Requeridos</TabsTrigger>
-                        <TabsTrigger value="shipping">Envío</TabsTrigger>
-                        <TabsTrigger value="policy">Políticas</TabsTrigger>
-                        <TabsTrigger value="other">Otros</TabsTrigger>
-                      </TabsList>
-
-                      <TabsContent value="required" className="space-y-4">
-                        <h3 className="font-medium text-red-600">Campos requeridos</h3>
-                        {EVIDENCE_FIELDS.filter(f => f.required).map(renderEvidenceField)}
-                      </TabsContent>
-
-                      <TabsContent value="shipping" className="space-y-4">
-                        <h3 className="font-medium">Información de envío</h3>
-                        {EVIDENCE_FIELDS.filter(f => f.category === 'shipping').map(renderEvidenceField)}
-                      </TabsContent>
-
-                      <TabsContent value="policy" className="space-y-4">
-                        <h3 className="font-medium">Políticas y términos</h3>
-                        {EVIDENCE_FIELDS.filter(f => f.category === 'policy').map(renderEvidenceField)}
-                      </TabsContent>
-
-                      <TabsContent value="other" className="space-y-4">
-                        <h3 className="font-medium">Información adicional</h3>
-                        {EVIDENCE_FIELDS.filter(f => f.category === 'other').map(renderEvidenceField)}
-                      </TabsContent>
-                    </Tabs>
-
-                    <DialogFooter>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowEvidenceDialog(false)}
-                        disabled={isSubmitting}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={isSubmitting || !isValid}
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Enviando...
-                          </>
-                        ) : (
-                          <>
-                            <Send className="w-4 h-4 mr-2" />
-                            Enviar evidencia
-                          </>
-                        )}
-                      </Button>
-                    </DialogFooter>
-                  </form>
+                      <Tabs defaultValue="required" className="space-y-4">
+                        <TabsList className="grid w-full grid-cols-4">
+                          <TabsTrigger value="required">Requeridos</TabsTrigger>
+                          <TabsTrigger value="shipping">Envío</TabsTrigger>
+                          <TabsTrigger value="policy">Políticas</TabsTrigger>
+                          <TabsTrigger value="other">Otros</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="required" className="space-y-4">
+                          <h3 className="font-medium text-red-600">Campos requeridos</h3>
+                          {EVIDENCE_FIELDS.filter(f => f.required).map(renderEvidenceField)}
+                        </TabsContent>
+                        <TabsContent value="shipping" className="space-y-4">
+                          <h3 className="font-medium">Información de envío</h3>
+                          {EVIDENCE_FIELDS.filter(f => f.category === 'shipping').map(renderEvidenceField)}
+                        </TabsContent>
+                        <TabsContent value="policy" className="space-y-4">
+                          <h3 className="font-medium">Políticas y términos</h3>
+                          {EVIDENCE_FIELDS.filter(f => f.category === 'policy').map(renderEvidenceField)}
+                        </TabsContent>
+                        <TabsContent value="other" className="space-y-4">
+                          <h3 className="font-medium">Información adicional</h3>
+                          {EVIDENCE_FIELDS.filter(f => f.category === 'other').map(renderEvidenceField)}
+                        </TabsContent>
+                      </Tabs>
+                      {/* DialogFooter Fix */}
+                      <div className="flex justify-end gap-2 mt-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowEvidenceDialog(false)}
+                          disabled={isSubmitting}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={isSubmitting || !isValid}
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Enviando...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-4 h-4 mr-2" />
+                              Enviar evidencia
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </form>
+                  </div>
                 </DialogContent>
               </Dialog>
             )}
-
-            {/* Accept Dispute */}
-            {canAcceptDispute && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" className="h-auto p-4 flex flex-col items-center space-y-2">
-                    <XCircle className="w-6 h-6" />
-                    <div className="text-center">
-                      <div className="font-medium">Aceptar disputa</div>
-                      <div className="text-xs opacity-80">
-                        No contestar y aceptar el cargo
-                      </div>
-                    </div>
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>¿Aceptar disputa?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Al aceptar esta disputa, reconoces que el cargo es válido y no proporcionarás 
-                      evidencia para contestarla. Esta acción no se puede deshacer.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleAcceptDispute}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Sí, aceptar disputa
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-
+ [0]
             {/* Refresh Status */}
             {onRefreshStatus && (
               <Button
@@ -688,7 +628,6 @@ export default function DisputeActions({
                 </div>
               </Button>
             )}
-
             {/* View Original Payment */}
             <Button
               variant="outline"
@@ -706,7 +645,6 @@ export default function DisputeActions({
               </a>
             </Button>
           </div>
-
           {/* Help Text */}
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-start space-x-2">

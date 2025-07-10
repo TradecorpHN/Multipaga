@@ -16,13 +16,13 @@ export function debounce<T extends (...args: any[]) => any>(
   wait: number
 ): (...args: Parameters<T>) => void {
   let timeout: NodeJS.Timeout | null = null
-  
+
   return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       timeout = null
       func(...args)
     }
-    
+
     if (timeout) clearTimeout(timeout)
     timeout = setTimeout(later, wait)
   }
@@ -33,13 +33,13 @@ export function throttle<T extends (...args: any[]) => any>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
-  let inThrottle: boolean = false
-  
-  return function executedFunction(...args: Parameters<T>) {
+  let inThrottle = false
+
+  return (...args: Parameters<T>) => {
     if (!inThrottle) {
-      func.apply(this, args)
+      func(...args)
       inThrottle = true
-      setTimeout(() => inThrottle = false, limit)
+      setTimeout(() => (inThrottle = false), limit)
     }
   }
 }
@@ -62,7 +62,6 @@ export function isBrowser(): boolean {
 // Check if running on mobile
 export function isMobile(): boolean {
   if (!isBrowser()) return false
-  
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   )
@@ -73,18 +72,18 @@ export function getQueryParams(url?: string): Record<string, string> {
   const queryString = url ? new URL(url).search : window.location.search
   const params = new URLSearchParams(queryString)
   const result: Record<string, string> = {}
-  
+
   params.forEach((value, key) => {
     result[key] = value
   })
-  
+
   return result
 }
 
 // Build query string from object
 export function buildQueryString(params: Record<string, any>): string {
   const searchParams = new URLSearchParams()
-  
+
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null && value !== '') {
       if (Array.isArray(value)) {
@@ -94,7 +93,7 @@ export function buildQueryString(params: Record<string, any>): string {
       }
     }
   })
-  
+
   const queryString = searchParams.toString()
   return queryString ? `?${queryString}` : ''
 }
@@ -103,12 +102,12 @@ export function buildQueryString(params: Record<string, any>): string {
 export function deepClone<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') return obj
   if (obj instanceof Date) return new Date(obj.getTime()) as any
-  if (obj instanceof Array) return obj.map(item => deepClone(item)) as any
+  if (Array.isArray(obj)) return obj.map(item => deepClone(item)) as any
   if (obj instanceof Object) {
     const clonedObj = {} as T
     for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        clonedObj[key] = deepClone(obj[key])
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        clonedObj[key] = deepClone((obj as any)[key])
       }
     }
     return clonedObj
@@ -141,7 +140,7 @@ export function sortBy<T>(array: T[], key: keyof T, order: 'asc' | 'desc' = 'asc
   return [...array].sort((a, b) => {
     const aVal = a[key]
     const bVal = b[key]
-    
+
     if (aVal < bVal) return order === 'asc' ? -1 : 1
     if (aVal > bVal) return order === 'asc' ? 1 : -1
     return 0
@@ -149,7 +148,7 @@ export function sortBy<T>(array: T[], key: keyof T, order: 'asc' | 'desc' = 'asc
 }
 
 // Pick specific keys from object
-export function pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
+export function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
   const result = {} as Pick<T, K>
   keys.forEach(key => {
     if (key in obj) {
@@ -160,7 +159,7 @@ export function pick<T, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
 }
 
 // Omit specific keys from object
-export function omit<T, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
+export function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
   const result = { ...obj }
   keys.forEach(key => {
     delete result[key]
@@ -186,14 +185,10 @@ export function isValidUrl(url: string): boolean {
 
 // Format error message
 export function formatError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message
-  }
-  if (typeof error === 'string') {
-    return error
-  }
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
   if (error && typeof error === 'object' && 'message' in error) {
-    return String(error.message)
+    return String((error as any).message)
   }
   return 'An unknown error occurred'
 }
@@ -208,32 +203,30 @@ export async function retry<T>(
     onError?: (error: Error, attempt: number) => void
   } = {}
 ): Promise<T> {
-  const { 
-    attempts = 3, 
-    delay = 1000, 
+  const {
+    attempts = 3,
+    delay = 1000,
     maxDelay = 10000,
-    onError 
+    onError
   } = options
-  
+
   let lastError: Error
-  
+
   for (let i = 0; i < attempts; i++) {
     try {
       return await fn()
     } catch (error) {
       lastError = error as Error
-      
-      if (onError) {
-        onError(lastError, i + 1)
-      }
-      
+
+      if (onError) onError(lastError, i + 1)
+
       if (i < attempts - 1) {
         const waitTime = Math.min(delay * Math.pow(2, i), maxDelay)
         await sleep(waitTime)
       }
     }
   }
-  
+
   throw lastError!
 }
 
@@ -247,37 +240,32 @@ export function parseJSON<T>(json: string, fallback?: T): T | undefined {
 }
 
 // Get nested value from object
-export function get<T>(
-  obj: any,
-  path: string,
-  defaultValue?: T
-): T {
+export function get<T>(obj: any, path: string, defaultValue?: T): T {
   const keys = path.split('.')
   let result = obj
-  
+
   for (const key of keys) {
     result = result?.[key]
     if (result === undefined) {
       return defaultValue as T
     }
   }
-  
+
   return result
 }
 
 // Set nested value in object
-export function set<T>(
-  obj: T,
-  path: string,
-  value: any
-): T {
+export function set<T extends object>(obj: T, path: string, value: any): T {
   const keys = path.split('.')
   const lastKey = keys.pop()!
-  const target = keys.reduce((acc, key) => {
-    if (!acc[key]) acc[key] = {}
-    return acc[key]
-  }, obj as any)
-  
+  let target: any = obj
+
+  for (const key of keys) {
+    if (typeof target[key] !== 'object' || target[key] === null) {
+      target[key] = {}
+    }
+    target = target[key]
+  }
   target[lastKey] = value
   return obj
 }

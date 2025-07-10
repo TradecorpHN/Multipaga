@@ -1,24 +1,20 @@
-// ==============================================================================
-// DisputeList.tsx - Componente para listar disputas
-// ==============================================================================
-
-// /home/kali/multipaga/src/presentation/components/disputes/DisputeList.tsx
 'use client'
 
 import React, { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { 
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Button } from '@/presentation/components/ui/Button'
+import { Input } from '@/presentation/components/ui/Input'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Skeleton } from '@/presentation/components/ui/Skeleton'
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from '@/presentation/components/ui/Select'
 import {
   Table,
   TableBody,
@@ -26,7 +22,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from '@/presentation/components/ui/Table'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,11 +30,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { cn, formatCurrency, formatDate } from '@/lib/utils'
-import { 
+} from '@/presentation/components/ui/DropdownMenu'
+import { Checkbox } from '@/presentation/components/ui/Checkbox'
+import { Alert, AlertDescription } from '@/presentation/components/ui/Alert'
+import { formatCurrency, formatDate } from '@/presentation/components/ui/formatters'
+import { cn } from '@/presentation/lib/utils'
+import { useToast } from '@/presentation/components/ui/use-toast'
+
+import {
   AlertTriangle,
   Search,
   Filter,
@@ -58,7 +57,6 @@ import {
   TrendingUp,
   TrendingDown
 } from 'lucide-react'
-import { useToast } from '@/components/ui/use-toast'
 
 // Tipos para disputas
 interface DisputeResponse {
@@ -80,12 +78,6 @@ interface DisputeResponse {
   created_at: string
   profile_id?: string
   merchant_connector_id?: string
-}
-
-interface DisputeListResponse {
-  disputes: DisputeResponse[]
-  total_count: number
-  has_more: boolean
 }
 
 interface DisputeFilters {
@@ -117,45 +109,45 @@ interface DisputeListProps {
 
 // Configuración de estados
 const DISPUTE_STATUS_CONFIG = {
-  dispute_opened: { 
-    label: 'Opened', 
-    variant: 'destructive' as const, 
+  dispute_opened: {
+    label: 'Opened',
+    variant: 'destructive' as const,
     icon: AlertTriangle,
     color: 'text-red-400'
   },
-  dispute_expired: { 
-    label: 'Expired', 
-    variant: 'secondary' as const, 
+  dispute_expired: {
+    label: 'Expired',
+    variant: 'secondary' as const,
     icon: Clock,
     color: 'text-gray-400'
   },
-  dispute_accepted: { 
-    label: 'Accepted', 
-    variant: 'secondary' as const, 
+  dispute_accepted: {
+    label: 'Accepted',
+    variant: 'secondary' as const,
     icon: CheckCircle,
     color: 'text-blue-400'
   },
-  dispute_cancelled: { 
-    label: 'Cancelled', 
-    variant: 'secondary' as const, 
+  dispute_cancelled: {
+    label: 'Cancelled',
+    variant: 'secondary' as const,
     icon: XCircle,
     color: 'text-gray-400'
   },
-  dispute_challenged: { 
-    label: 'Challenged', 
-    variant: 'warning' as const, 
+  dispute_challenged: {
+    label: 'Challenged',
+    variant: 'warning' as const,
     icon: Shield,
     color: 'text-yellow-400'
   },
-  dispute_won: { 
-    label: 'Won', 
-    variant: 'success' as const, 
+  dispute_won: {
+    label: 'Won',
+    variant: 'success' as const,
     icon: CheckCircle,
     color: 'text-green-400'
   },
-  dispute_lost: { 
-    label: 'Lost', 
-    variant: 'destructive' as const, 
+  dispute_lost: {
+    label: 'Lost',
+    variant: 'destructive' as const,
     icon: XCircle,
     color: 'text-red-400'
   },
@@ -191,7 +183,7 @@ export function DisputeList({
   className
 }: DisputeListProps) {
   const router = useRouter()
-  const { toast } = useToast()
+  const { showToast } = useToast()
   const [selectedDisputes, setSelectedDisputes] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<'created_at' | 'amount' | 'status'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -200,7 +192,7 @@ export function DisputeList({
   const sortedDisputes = useMemo(() => {
     return [...disputes].sort((a, b) => {
       let aVal: any, bVal: any
-      
+
       switch (sortBy) {
         case 'amount':
           aVal = parseInt(a.amount)
@@ -216,7 +208,7 @@ export function DisputeList({
           bVal = new Date(b.created_at).getTime()
           break
       }
-      
+
       if (sortOrder === 'asc') {
         return aVal < bVal ? -1 : aVal > bVal ? 1 : 0
       } else {
@@ -235,26 +227,26 @@ export function DisputeList({
     }
   }
 
-  const handleSelectDispute = (disputeId: string, checked: boolean) => {
-    setSelectedDisputes(prev => 
-      checked 
-        ? [...prev, disputeId]
-        : prev.filter(id => id !== disputeId)
-    )
+  const handleSelectDispute = (disputeId: string, checked: boolean | "indeterminate") => {
+    if (checked === true) {
+      setSelectedDisputes(prev => [...prev, disputeId])
+    } else {
+      setSelectedDisputes(prev => prev.filter(id => id !== disputeId))
+    }
   }
 
-  const handleSelectAll = (checked: boolean) => {
+  const handleSelectAll = (checked: boolean | "indeterminate") => {
     setSelectedDisputes(
-      checked ? disputes.map(d => d.dispute_id) : []
+      checked === true ? disputes.map(d => d.dispute_id) : []
     )
   }
 
   const handleCopy = async (text: string, label: string) => {
     const success = await copyToClipboard(text)
     if (success) {
-      toast({
-        title: 'Copied!',
-        description: `${label} copied to clipboard`,
+      showToast({
+        type: 'success',
+        message: `${label} copied to clipboard`
       })
     }
   }
@@ -274,7 +266,7 @@ export function DisputeList({
     const won = disputes.filter(d => d.dispute_status === 'dispute_won').length
     const lost = disputes.filter(d => d.dispute_status === 'dispute_lost').length
     const totalAmount = disputes.reduce((sum, d) => sum + parseInt(d.amount), 0)
-    
+
     return { total, opened, won, lost, totalAmount }
   }, [disputes])
 
@@ -293,7 +285,6 @@ export function DisputeList({
             </div>
           </CardContent>
         </Card>
-        
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
@@ -305,7 +296,6 @@ export function DisputeList({
             </div>
           </CardContent>
         </Card>
-        
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
@@ -317,7 +307,6 @@ export function DisputeList({
             </div>
           </CardContent>
         </Card>
-        
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
@@ -345,7 +334,6 @@ export function DisputeList({
                 Manage and track payment disputes
               </CardDescription>
             </div>
-            
             <div className="flex items-center space-x-2">
               <Button
                 variant="outline"
@@ -356,7 +344,6 @@ export function DisputeList({
                 <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
                 Refresh
               </Button>
-              
               <Button variant="outline" size="sm">
                 <Download className="w-4 h-4 mr-2" />
                 Export
@@ -364,7 +351,6 @@ export function DisputeList({
             </div>
           </div>
         </CardHeader>
-        
         <CardContent className="space-y-4">
           {/* Barra de búsqueda y filtros */}
           <div className="flex flex-col lg:flex-row gap-4">
@@ -372,15 +358,14 @@ export function DisputeList({
               <Input
                 placeholder="Search disputes by ID, payment ID, or reason..."
                 value={filters.search || ''}
-                onChange={(e) => onFiltersChange?.({ ...filters, search: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFiltersChange?.({ ...filters, search: e.target.value })}
                 className="w-full"
               />
             </div>
-            
             <div className="flex items-center space-x-2">
               <Select
                 value={filters.status?.[0] || 'all'}
-                onValueChange={(value) => 
+                onValueChange={(value: string) =>
                   onFiltersChange?.({
                     ...filters,
                     status: value === 'all' ? undefined : [value]
@@ -399,10 +384,9 @@ export function DisputeList({
                   ))}
                 </SelectContent>
               </Select>
-              
               <Select
                 value={filters.stage?.[0] || 'all'}
-                onValueChange={(value) => 
+                onValueChange={(value: string) =>
                   onFiltersChange?.({
                     ...filters,
                     stage: value === 'all' ? undefined : [value]
@@ -421,7 +405,6 @@ export function DisputeList({
                   ))}
                 </SelectContent>
               </Select>
-              
               <Button variant="outline" size="sm">
                 <Filter className="w-4 h-4 mr-2" />
                 More Filters
@@ -449,6 +432,7 @@ export function DisputeList({
                   <TableHead className="w-12">
                     <Checkbox
                       checked={selectedDisputes.length === disputes.length && disputes.length > 0}
+                      indeterminate={selectedDisputes.length > 0 && selectedDisputes.length < disputes.length}
                       onCheckedChange={handleSelectAll}
                     />
                   </TableHead>
@@ -514,20 +498,19 @@ export function DisputeList({
                     const StatusIcon = statusConfig.icon
 
                     return (
-                      <TableRow 
+                      <TableRow
                         key={dispute.dispute_id}
                         className="cursor-pointer hover:bg-gray-50/5"
                         onClick={() => handleDisputeClick(dispute)}
                       >
-                        <TableCell onClick={(e) => e.stopPropagation()}>
+                        <TableCell onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                           <Checkbox
                             checked={selectedDisputes.includes(dispute.dispute_id)}
-                            onCheckedChange={(checked) => 
-                              handleSelectDispute(dispute.dispute_id, checked as boolean)
+                            onCheckedChange={(checked) =>
+                              handleSelectDispute(dispute.dispute_id, checked)
                             }
                           />
                         </TableCell>
-                        
                         <TableCell>
                           <div className="space-y-1">
                             <p className="font-mono text-sm">{dispute.dispute_id}</p>
@@ -536,7 +519,6 @@ export function DisputeList({
                             </Badge>
                           </div>
                         </TableCell>
-                        
                         <TableCell>
                           <div className="space-y-1">
                             <p className="font-mono text-sm">{dispute.payment_id}</p>
@@ -547,29 +529,26 @@ export function DisputeList({
                             )}
                           </div>
                         </TableCell>
-                        
                         <TableCell>
-                          <div className="space-y-1">
-                            <p className="font-medium">
-                              {formatCurrency(parseInt(dispute.amount), dispute.currency)}
-                            </p>
-                            <p className="text-xs text-gray-500">{dispute.currency}</p>
-                          </div>
+                         <div className="space-y-1">
+  <p className="font-medium">
+    {formatCurrency(parseInt(dispute.amount), { currency: dispute.currency })}
+  </p>
+  <p className="text-xs text-gray-500">{dispute.currency}</p>
+</div>
+
                         </TableCell>
-                        
                         <TableCell>
                           <Badge variant={statusConfig.variant} className="flex items-center space-x-1 w-fit">
                             <StatusIcon className="w-3 h-3" />
                             <span>{statusConfig.label}</span>
                           </Badge>
                         </TableCell>
-                        
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             <p className="font-medium capitalize">{dispute.connector}</p>
                           </div>
                         </TableCell>
-                        
                         <TableCell>
                           <div className="space-y-1">
                             <p className="text-sm">{formatDate(dispute.created_at)}</p>
@@ -580,8 +559,7 @@ export function DisputeList({
                             )}
                           </div>
                         </TableCell>
-                        
-                        <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <TableCell className="text-right" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm">
@@ -594,13 +572,13 @@ export function DisputeList({
                                 <Eye className="w-4 h-4 mr-2" />
                                 View Details
                               </DropdownMenuItem>
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 onClick={() => handleCopy(dispute.dispute_id, 'Dispute ID')}
                               >
                                 <Copy className="w-4 h-4 mr-2" />
                                 Copy Dispute ID
                               </DropdownMenuItem>
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 onClick={() => handleCopy(dispute.payment_id, 'Payment ID')}
                               >
                                 <Copy className="w-4 h-4 mr-2" />
@@ -634,7 +612,6 @@ export function DisputeList({
             </Table>
           </div>
         </CardContent>
-        
         {/* Paginación */}
         {hasMore && (
           <CardContent className="border-t border-gray-200/20">

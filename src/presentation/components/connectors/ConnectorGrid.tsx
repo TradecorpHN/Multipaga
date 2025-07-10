@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react'
 import {
   Search,
-  Filter,
   Grid3X3,
   List,
   Plus,
@@ -16,7 +15,6 @@ import {
   Clock,
   AlertTriangle,
   TrendingUp,
-  TrendingDown,
   BarChart3,
   Globe,
 } from 'lucide-react'
@@ -45,9 +43,8 @@ import { Skeleton } from '@/presentation/components/ui/Skeleton'
 import ConnectorCard from './ConnectorCard'
 import ConnectorLogo from './ConnectorLogo'
 import { cn } from '@/presentation/lib/utils'
-import { formatCurrency, formatPercentage } from '@/presentation/lib/formatters'
+import { formatCurrency, formatPercentage } from '@/presentation/components/ui/formatters'
 
-// Connector types and interfaces
 interface ConnectorInfo {
   connector_id: string
   connector_name: string
@@ -110,7 +107,6 @@ const CONNECTOR_STATUSES = [
   { value: 'pending', label: 'Pendiente', color: 'warning', icon: Clock },
 ] as const
 
-// Available connectors catalog
 const AVAILABLE_CONNECTORS = [
   {
     name: 'Stripe',
@@ -171,29 +167,20 @@ export default function ConnectorGrid({
   const [filters, setFilters] = useState<ConnectorFilters>({})
   const [activeTab, setActiveTab] = useState('active')
 
-  // Filter and search connectors
   const filteredConnectors = useMemo(() => {
     let filtered = connectors
-
-    // Search filter
     if (searchQuery) {
       filtered = filtered.filter(connector =>
         connector.connector_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         connector.business_label.toLowerCase().includes(searchQuery.toLowerCase())
       )
     }
-
-    // Status filter
     if (filters.status?.length) {
       filtered = filtered.filter(connector => filters.status!.includes(connector.status))
     }
-
-    // Type filter
     if (filters.connector_type?.length) {
       filtered = filtered.filter(connector => filters.connector_type!.includes(connector.connector_type))
     }
-
-    // Payment methods filter
     if (filters.payment_methods?.length) {
       filtered = filtered.filter(connector =>
         filters.payment_methods!.some(method =>
@@ -201,11 +188,9 @@ export default function ConnectorGrid({
         )
       )
     }
-
     return filtered
   }, [connectors, searchQuery, filters])
 
-  // Group connectors by status for tabs
   const connectorsByStatus = useMemo(() => {
     return {
       all: filteredConnectors,
@@ -216,14 +201,12 @@ export default function ConnectorGrid({
     }
   }, [filteredConnectors])
 
-  // Summary statistics
   const summaryStats = useMemo(() => {
     const active = connectors.filter(c => c.status === 'active')
     const totalVolume = active.reduce((sum, c) => sum + (c.stats?.volume_30d || 0), 0)
     const avgSuccessRate = active.length > 0
       ? active.reduce((sum, c) => sum + (c.stats?.success_rate || 0), 0) / active.length
       : 0
-
     return {
       total: connectors.length,
       active: active.length,
@@ -286,7 +269,8 @@ export default function ConnectorGrid({
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
               <div className="flex items-center space-x-3">
-                <ConnectorLogo name={connector.name} size="lg" />
+                {/* Usa el prop correcto según el tipo de tu ConnectorLogo */}
+                <ConnectorLogo connectorName={connector.name} size="lg" />
                 <div>
                   <h3 className="font-semibold">{connector.name}</h3>
                   {connector.popular && (
@@ -294,19 +278,16 @@ export default function ConnectorGrid({
                   )}
                 </div>
               </div>
-              
               <Button size="sm">
                 <Plus className="w-4 h-4 mr-1" />
                 Agregar
               </Button>
             </div>
           </CardHeader>
-          
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               {connector.description}
             </p>
-            
             <div className="space-y-2">
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Métodos soportados:</p>
@@ -323,23 +304,21 @@ export default function ConnectorGrid({
                   )}
                 </div>
               </div>
-              
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Comisiones:</p>
                 <p className="text-sm">{connector.fees}</p>
               </div>
-              
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Configuración:</span>
-                <Badge 
+                <Badge
                   variant={
                     connector.setup_complexity === 'easy' ? 'success' :
-                    connector.setup_complexity === 'medium' ? 'warning' : 'destructive'
+                      connector.setup_complexity === 'medium' ? 'warning' : 'destructive'
                   }
                   size="sm"
                 >
                   {connector.setup_complexity === 'easy' ? 'Fácil' :
-                   connector.setup_complexity === 'medium' ? 'Medio' : 'Difícil'}
+                    connector.setup_complexity === 'medium' ? 'Medio' : 'Difícil'}
                 </Badge>
               </div>
             </div>
@@ -360,7 +339,6 @@ export default function ConnectorGrid({
               <Skeleton className="h-10 w-24" />
             </div>
           </div>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-64" />
@@ -384,11 +362,10 @@ export default function ConnectorGrid({
               </CardTitle>
               <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                 <span>✓ {summaryStats.active} activos</span>
-                <span>📊 {formatPercentage(summaryStats.avgSuccessRate)} éxito promedio</span>
-                <span>💰 {formatCurrency(summaryStats.totalVolume, summaryStats.currency)} volumen</span>
+                <span>📊 {formatPercentage(summaryStats.avgSuccessRate)}</span>
+                <span>💰 {formatCurrency(summaryStats.totalVolume, { currency: summaryStats.currency })}</span>
               </div>
             </div>
-            
             <div className="flex items-center gap-2">
               <div className="flex items-center border rounded-lg p-1">
                 <Button
@@ -396,6 +373,7 @@ export default function ConnectorGrid({
                   size="sm"
                   onClick={() => setViewMode('grid')}
                   className="h-8 w-8 p-0"
+                  type="button"
                 >
                   <Grid3X3 className="w-4 h-4" />
                 </Button>
@@ -404,18 +382,17 @@ export default function ConnectorGrid({
                   size="sm"
                   onClick={() => setViewMode('list')}
                   className="h-8 w-8 p-0"
+                  type="button"
                 >
                   <List className="w-4 h-4" />
                 </Button>
               </div>
-              
-              <Button variant="outline" size="sm" onClick={onRefresh}>
+              <Button variant="outline" size="sm" onClick={onRefresh} type="button">
                 <RefreshCw className="w-4 h-4" />
               </Button>
-              
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" type="button">
                     <MoreHorizontal className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -435,7 +412,6 @@ export default function ConnectorGrid({
             </div>
           </div>
         </CardHeader>
-        
         <CardContent className="space-y-4">
           {/* Search and Filters */}
           <div className="flex flex-col sm:flex-row gap-4">
@@ -450,16 +426,18 @@ export default function ConnectorGrid({
                 />
               </div>
             </div>
-            
             <div className="flex items-center gap-2">
-              <Select 
-                value={filters.connector_type?.[0] || ''} 
-                onValueChange={(value) => setFilters(prev => ({ 
-                  ...prev, 
-                  connector_type: value ? [value] : undefined 
-                }))}
+              {/* Selector Tipo de conector */}
+              <Select
+                value={filters.connector_type?.[0] || ''}
+                onValueChange={(value: string) =>
+                  setFilters(prev => ({
+                    ...prev,
+                    connector_type: value ? [value] : undefined
+                  }))
+                }
               >
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-32">
                   <SelectValue placeholder="Tipo de conector" />
                 </SelectTrigger>
                 <SelectContent>
@@ -468,22 +446,24 @@ export default function ConnectorGrid({
                     const Icon = type.icon
                     return (
                       <SelectItem key={type.value} value={type.value}>
-                        <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-2">
                           <Icon className="w-4 h-4" />
                           {type.label}
-                        </div>
+                        </span>
                       </SelectItem>
                     )
                   })}
                 </SelectContent>
               </Select>
-              
-              <Select 
-                value={filters.status?.[0] || ''} 
-                onValueChange={(value) => setFilters(prev => ({ 
-                  ...prev, 
-                  status: value ? [value] : undefined 
-                }))}
+              {/* Selector Estado */}
+              <Select
+                value={filters.status?.[0] || ''}
+                onValueChange={(value: string) =>
+                  setFilters(prev => ({
+                    ...prev,
+                    status: value ? [value] : undefined
+                  }))
+                }
               >
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="Estado" />
@@ -494,10 +474,10 @@ export default function ConnectorGrid({
                     const Icon = status.icon
                     return (
                       <SelectItem key={status.value} value={status.value}>
-                        <div className="flex items-center gap-2">
+                        <span className="flex items-center gap-2">
                           <Icon className="w-3 h-3" />
                           {status.label}
-                        </div>
+                        </span>
                       </SelectItem>
                     )
                   })}
@@ -507,7 +487,6 @@ export default function ConnectorGrid({
           </div>
         </CardContent>
       </Card>
-
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -527,7 +506,6 @@ export default function ConnectorGrid({
             Todos ({connectorsByStatus.all.length})
           </TabsTrigger>
         </TabsList>
-
         <TabsContent value="active" className="mt-6">
           {connectorsByStatus.active.length === 0 ? (
             <Card>
@@ -547,7 +525,6 @@ export default function ConnectorGrid({
             renderConnectorGrid(connectorsByStatus.active)
           )}
         </TabsContent>
-
         <TabsContent value="inactive" className="mt-6">
           {connectorsByStatus.inactive.length === 0 ? (
             <Card>
@@ -563,7 +540,6 @@ export default function ConnectorGrid({
             renderConnectorGrid(connectorsByStatus.inactive)
           )}
         </TabsContent>
-
         <TabsContent value="testing" className="mt-6">
           {connectorsByStatus.testing.length === 0 ? (
             <Card>
@@ -579,7 +555,6 @@ export default function ConnectorGrid({
             renderConnectorGrid(connectorsByStatus.testing)
           )}
         </TabsContent>
-
         <TabsContent value="available" className="mt-6">
           <div className="space-y-6">
             <div className="text-center">
@@ -591,7 +566,6 @@ export default function ConnectorGrid({
             {renderAvailableConnectors()}
           </div>
         </TabsContent>
-
         <TabsContent value="all" className="mt-6">
           {connectorsByStatus.all.length === 0 ? (
             <Card>

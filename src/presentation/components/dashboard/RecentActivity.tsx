@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { formatDistanceToNow, isToday, isYesterday, format } from 'date-fns'
+import { format, isToday, isYesterday } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   CreditCard,
@@ -12,10 +12,8 @@ import {
   Zap,
   CheckCircle,
   XCircle,
-  Clock,
   DollarSign,
   ArrowRight,
-  Filter,
   MoreHorizontal,
   Eye,
   ExternalLink,
@@ -44,10 +42,9 @@ import {
 } from '@/presentation/components/ui/Select'
 import { Avatar, AvatarFallback, AvatarImage } from '@/presentation/components/ui/Avatar'
 import { Skeleton } from '@/presentation/components/ui/Skeleton'
-import { formatCurrency } from '@/presentation/lib/formatters'
+import { formatCurrency } from '@/presentation/components/ui/formatters'
 import { cn } from '@/presentation/lib/utils'
 
-// Activity types configuration
 const ActivityTypeConfig = {
   payment_created: {
     label: 'Pago creado',
@@ -171,11 +168,10 @@ export default function RecentActivity({
 }: RecentActivityProps) {
   const [typeFilter, setTypeFilter] = useState('all')
 
-  // Filter activities
+  // Filtro avanzado por tipo y rango de fechas
   const filteredActivities = useMemo(() => {
     let filtered = activities
 
-    // Apply type filter
     if (typeFilter !== 'all') {
       filtered = filtered.filter(activity => {
         switch (typeFilter) {
@@ -195,11 +191,9 @@ export default function RecentActivity({
       })
     }
 
-    // Apply time range filter
     if (timeRange !== 'all') {
       const now = new Date()
       const cutoff = new Date()
-
       switch (timeRange) {
         case 'today':
           cutoff.setHours(0, 0, 0, 0)
@@ -219,56 +213,37 @@ export default function RecentActivity({
           cutoff.setDate(cutoff.getDate() - 30)
           break
       }
-
       if (timeRange !== 'yesterday') {
-        filtered = filtered.filter(activity => 
-          new Date(activity.timestamp) >= cutoff
-        )
+        filtered = filtered.filter(activity => new Date(activity.timestamp) >= cutoff)
       }
     }
 
     return filtered.slice(0, maxItems)
   }, [activities, typeFilter, timeRange, maxItems])
 
-  // Group activities by date
+  // Agrupa por fecha de forma avanzada
   const groupedActivities = useMemo(() => {
     const groups: Record<string, ActivityItem[]> = {}
-
     filteredActivities.forEach(activity => {
       const activityDate = new Date(activity.timestamp)
       let dateKey: string
-
-      if (isToday(activityDate)) {
-        dateKey = 'Hoy'
-      } else if (isYesterday(activityDate)) {
-        dateKey = 'Ayer'
-      } else {
-        dateKey = format(activityDate, 'EEEE, d MMMM', { locale: es })
-      }
-
-      if (!groups[dateKey]) {
-        groups[dateKey] = []
-      }
+      if (isToday(activityDate)) dateKey = 'Hoy'
+      else if (isYesterday(activityDate)) dateKey = 'Ayer'
+      else dateKey = format(activityDate, 'EEEE, d MMMM', { locale: es })
+      if (!groups[dateKey]) groups[dateKey] = []
       groups[dateKey].push(activity)
     })
-
     return groups
   }, [filteredActivities])
 
   const getEntityLink = (activity: ActivityItem) => {
     switch (activity.entity_type) {
-      case 'payment':
-        return `/dashboard/payments/${activity.entity_id}`
-      case 'refund':
-        return `/dashboard/refunds/${activity.entity_id}`
-      case 'dispute':
-        return `/dashboard/disputes/${activity.entity_id}`
-      case 'customer':
-        return `/dashboard/customers/${activity.entity_id}`
-      case 'connector':
-        return `/dashboard/connectors/${activity.entity_id}`
-      default:
-        return '#'
+      case 'payment': return `/dashboard/payments/${activity.entity_id}`
+      case 'refund': return `/dashboard/refunds/${activity.entity_id}`
+      case 'dispute': return `/dashboard/disputes/${activity.entity_id}`
+      case 'customer': return `/dashboard/customers/${activity.entity_id}`
+      case 'connector': return `/dashboard/connectors/${activity.entity_id}`
+      default: return '#'
     }
   }
 
@@ -310,7 +285,6 @@ export default function RecentActivity({
             <ActivityIcon className="w-5 h-5" />
             Actividad reciente
           </CardTitle>
-          
           <div className="flex items-center gap-2">
             {showFilters && (
               <>
@@ -326,7 +300,6 @@ export default function RecentActivity({
                     ))}
                   </SelectContent>
                 </Select>
-
                 {onTimeRangeChange && (
                   <Select value={timeRange} onValueChange={onTimeRangeChange}>
                     <SelectTrigger className="w-32">
@@ -343,7 +316,6 @@ export default function RecentActivity({
                 )}
               </>
             )}
-            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm">
@@ -368,7 +340,6 @@ export default function RecentActivity({
           </div>
         </div>
       </CardHeader>
-
       <CardContent className="p-0">
         <ScrollArea className="h-96">
           <div className="p-6 space-y-6">
@@ -383,31 +354,27 @@ export default function RecentActivity({
               Object.entries(groupedActivities).map(([dateKey, activities], index) => (
                 <div key={dateKey}>
                   {index > 0 && <Separator className="my-6" />}
-                  
                   <div className="space-y-4">
                     <h3 className="text-sm font-medium text-muted-foreground">
                       {dateKey}
                     </h3>
-                    
                     <div className="space-y-3">
                       {activities.map((activity) => {
                         const config = ActivityTypeConfig[activity.type]
                         const Icon = config.icon
-                        
                         return (
                           <div
                             key={activity.id}
                             className="flex items-start space-x-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group"
                           >
-                            {/* Icon */}
+                            {/* Icono */}
                             <div className={cn(
                               'flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
                               config.bgColor
                             )}>
                               <Icon className={cn('w-5 h-5', config.color)} />
                             </div>
-                            
-                            {/* Content */}
+                            {/* Contenido */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center space-x-2">
                                 <p className="text-sm font-medium truncate">
@@ -415,23 +382,25 @@ export default function RecentActivity({
                                 </p>
                                 {activity.amount && activity.currency && (
                                   <Badge variant="secondary" className="text-xs">
-                                    {formatCurrency(activity.amount, activity.currency)}
+                                    formatCurrency(activity.amount, activity.currency)
+
                                   </Badge>
                                 )}
                               </div>
-                              
                               {activity.description && (
                                 <p className="text-sm text-muted-foreground mt-1">
                                   {activity.description}
                                 </p>
                               )}
-                              
                               {activity.user && (
                                 <div className="flex items-center space-x-2 mt-2">
                                   <Avatar className="h-4 w-4">
                                     <AvatarImage src={activity.user.avatar} />
                                     <AvatarFallback className="text-xs">
-                                      {activity.user.name.split(' ').map(n => n[0]).join('')}
+                                      {activity.user.name
+                                        .split(' ')
+                                        .map(n => n[0])
+                                        .join('')}
                                     </AvatarFallback>
                                   </Avatar>
                                   <span className="text-xs text-muted-foreground">
@@ -440,13 +409,11 @@ export default function RecentActivity({
                                 </div>
                               )}
                             </div>
-                            
-                            {/* Time and Actions */}
+                            {/* Hora y acción */}
                             <div className="flex items-center space-x-2">
                               <span className="text-xs text-muted-foreground">
                                 {formatActivityTime(activity.timestamp)}
                               </span>
-                              
                               <Link href={getEntityLink(activity)}>
                                 <Button
                                   variant="ghost"
@@ -468,7 +435,6 @@ export default function RecentActivity({
           </div>
         </ScrollArea>
       </CardContent>
-
       {filteredActivities.length > 0 && (
         <div className="px-6 py-4 border-t">
           <Link href="/dashboard/activity">
@@ -483,13 +449,13 @@ export default function RecentActivity({
   )
 }
 
-// Compact version for smaller spaces
-export function RecentActivityCompact({ 
-  activities, 
-  className = '' 
-}: { 
+// Compact
+export function RecentActivityCompact({
+  activities,
+  className = ''
+}: {
   activities: ActivityItem[]
-  className?: string 
+  className?: string
 }) {
   return (
     <RecentActivity
@@ -501,14 +467,14 @@ export function RecentActivityCompact({
   )
 }
 
-// Demo data for development
+// Demo data para desarrollo
 export const demoActivities: ActivityItem[] = [
   {
     id: '1',
     type: 'payment_succeeded',
     title: 'Pago de $150.00 completado',
     description: 'Pago de Juan Pérez procesado exitosamente',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
+    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 min ago
     amount: 15000,
     currency: 'USD',
     entity_id: 'pay_123',
@@ -524,7 +490,7 @@ export const demoActivities: ActivityItem[] = [
     type: 'refund_created',
     title: 'Reembolso procesado',
     description: 'Reembolso de $75.00 para pedido #ORD-001',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
     amount: 7500,
     currency: 'USD',
     entity_id: 'ref_456',
@@ -540,7 +506,7 @@ export const demoActivities: ActivityItem[] = [
     type: 'customer_created',
     title: 'Nuevo cliente registrado',
     description: 'Cliente Carlos López se registró en el sistema',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 hours ago
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
     entity_id: 'cust_789',
     entity_type: 'customer',
   },
@@ -549,7 +515,7 @@ export const demoActivities: ActivityItem[] = [
     type: 'connector_enabled',
     title: 'Conector Stripe activado',
     description: 'El conector de Stripe fue activado exitosamente',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
+    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
     entity_id: 'conn_stripe',
     entity_type: 'connector',
     user: {

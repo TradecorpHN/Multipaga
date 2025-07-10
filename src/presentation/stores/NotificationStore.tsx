@@ -17,15 +17,13 @@ interface Notification {
 }
 
 interface NotificationState {
-  // Notifications
   notifications: Notification[]
   unreadCount: number
-  
-  // UI State
   isOpen: boolean
-  
-  // Actions
-  addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void
+
+  addNotification: (
+    notification: Omit<Notification, 'id' | 'timestamp' | 'read'>
+  ) => void
   removeNotification: (id: string) => void
   markAsRead: (id: string) => void
   markAllAsRead: () => void
@@ -35,74 +33,74 @@ interface NotificationState {
 }
 
 export const useNotificationStore = create<NotificationState>()(
-  immer((set, get) => ({
-    // Initial state
+  immer((set: (fn: (state: NotificationState) => void) => void, get: () => NotificationState) => ({
     notifications: [],
     unreadCount: 0,
     isOpen: false,
-    
-    // Add notification
-    addNotification: (notification) => set((state) => {
-      const newNotification: Notification = {
-        ...notification,
-        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        timestamp: new Date().toISOString(),
-        read: false,
-      }
-      
-      state.notifications.unshift(newNotification)
-      state.unreadCount++
-      
-      // Keep only last 50 notifications
-      if (state.notifications.length > 50) {
-        state.notifications = state.notifications.slice(0, 50)
-      }
-    }),
-    
-    // Remove notification
-    removeNotification: (id) => set((state) => {
-      const index = state.notifications.findIndex(n => n.id === id)
-      if (index !== -1) {
-        const notification = state.notifications[index]
-        if (!notification.read) {
+
+    addNotification: (
+      notification: Omit<Notification, 'id' | 'timestamp' | 'read'>
+    ) =>
+      set((state: NotificationState) => {
+        const newNotification: Notification = {
+          ...notification,
+          id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date().toISOString(),
+          read: false,
+        }
+        state.notifications.unshift(newNotification)
+        state.unreadCount++
+
+        // Limitar a 50 notificaciones
+        if (state.notifications.length > 50) {
+          state.notifications = state.notifications.slice(0, 50)
+        }
+      }),
+
+    removeNotification: (id: string) =>
+      set((state: NotificationState) => {
+        const index = state.notifications.findIndex((n: Notification) => n.id === id)
+        if (index !== -1) {
+          const notification = state.notifications[index]
+          if (!notification.read) {
+            state.unreadCount--
+          }
+          state.notifications.splice(index, 1)
+        }
+      }),
+
+    markAsRead: (id: string) =>
+      set((state: NotificationState) => {
+        const notification = state.notifications.find((n: Notification) => n.id === id)
+        if (notification && !notification.read) {
+          notification.read = true
           state.unreadCount--
         }
-        state.notifications.splice(index, 1)
-      }
-    }),
-    
-    // Mark as read
-    markAsRead: (id) => set((state) => {
-      const notification = state.notifications.find(n => n.id === id)
-      if (notification && !notification.read) {
-        notification.read = true
-        state.unreadCount--
-      }
-    }),
-    
-    // Mark all as read
-    markAllAsRead: () => set((state) => {
-      state.notifications.forEach(n => {
-        n.read = true
-      })
-      state.unreadCount = 0
-    }),
-    
-    // Clear all notifications
-    clearAll: () => set((state) => {
-      state.notifications = []
-      state.unreadCount = 0
-    }),
-    
-    // Toggle panel
-    togglePanel: () => set((state) => {
-      state.isOpen = !state.isOpen
-    }),
-    
-    // Set open state
-    setOpen: (open) => set((state) => {
-      state.isOpen = open
-    }),
+      }),
+
+    markAllAsRead: () =>
+      set((state: NotificationState) => {
+        state.notifications.forEach((n: Notification) => {
+          n.read = true
+        })
+        state.unreadCount = 0
+      }),
+
+    clearAll: () =>
+      set((state: NotificationState) => {
+        state.notifications = []
+        state.unreadCount = 0
+      }),
+
+    togglePanel: () =>
+      set((state: NotificationState) => {
+        state.isOpen = !state.isOpen
+      }),
+
+    setOpen: (open: boolean) =>
+      set((state: NotificationState) => {
+        state.isOpen = open
+      }),
   }))
 )
 
@@ -115,7 +113,7 @@ export const notify = {
       message,
     })
   },
-  
+
   error: (title: string, message: string) => {
     useNotificationStore.getState().addNotification({
       type: 'error',
@@ -123,7 +121,7 @@ export const notify = {
       message,
     })
   },
-  
+
   warning: (title: string, message: string) => {
     useNotificationStore.getState().addNotification({
       type: 'warning',
@@ -131,7 +129,7 @@ export const notify = {
       message,
     })
   },
-  
+
   info: (title: string, message: string) => {
     useNotificationStore.getState().addNotification({
       type: 'info',
@@ -139,13 +137,14 @@ export const notify = {
       message,
     })
   },
-  
+
   payment: (paymentId: string, status: 'succeeded' | 'failed', amount: number, currency: string) => {
     const title = status === 'succeeded' ? 'Payment Successful' : 'Payment Failed'
-    const message = status === 'succeeded' 
-      ? `Payment ${paymentId} for ${currency} ${(amount / 100).toFixed(2)} completed successfully`
-      : `Payment ${paymentId} for ${currency} ${(amount / 100).toFixed(2)} failed`
-    
+    const message =
+      status === 'succeeded'
+        ? `Payment ${paymentId} for ${currency} ${(amount / 100).toFixed(2)} completed successfully`
+        : `Payment ${paymentId} for ${currency} ${(amount / 100).toFixed(2)} failed`
+
     useNotificationStore.getState().addNotification({
       type: status === 'succeeded' ? 'success' : 'error',
       title,
@@ -153,13 +152,14 @@ export const notify = {
       metadata: { paymentId, amount, currency, status },
     })
   },
-  
+
   refund: (refundId: string, status: 'succeeded' | 'failed', amount: number, currency: string) => {
     const title = status === 'succeeded' ? 'Refund Processed' : 'Refund Failed'
-    const message = status === 'succeeded' 
-      ? `Refund ${refundId} for ${currency} ${(amount / 100).toFixed(2)} processed successfully`
-      : `Refund ${refundId} for ${currency} ${(amount / 100).toFixed(2)} failed`
-    
+    const message =
+      status === 'succeeded'
+        ? `Refund ${refundId} for ${currency} ${(amount / 100).toFixed(2)} processed successfully`
+        : `Refund ${refundId} for ${currency} ${(amount / 100).toFixed(2)} failed`
+
     useNotificationStore.getState().addNotification({
       type: status === 'succeeded' ? 'success' : 'error',
       title,
@@ -167,7 +167,7 @@ export const notify = {
       metadata: { refundId, amount, currency, status },
     })
   },
-  
+
   dispute: (disputeId: string, stage: string, amount: number, currency: string) => {
     useNotificationStore.getState().addNotification({
       type: 'warning',

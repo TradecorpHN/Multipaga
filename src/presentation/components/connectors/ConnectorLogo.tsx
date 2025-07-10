@@ -2,13 +2,12 @@
 // ConnectorLogo.tsx - Componente para mostrar logos de conectores
 // ==============================================================================
 
-// /home/kali/multipaga/src/presentation/components/connectors/ConnectorLogo.tsx
 'use client'
 
 import React from 'react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
-import { 
+import {
   Building,
   CreditCard,
   Zap,
@@ -47,6 +46,7 @@ const CONNECTOR_LOGOS: Record<string, string> = {
   'paypal': '/logos/connectors/paypal.svg',
   'square': '/logos/connectors/square.svg',
   'braintree': '/logos/connectors/braintree.svg',
+  'checkout.com': '/logos/connectors/checkout.svg', // ← actualiza aquí si tus archivos usan .com
   'checkout': '/logos/connectors/checkout.svg',
   'worldpay': '/logos/connectors/worldpay.svg',
   'rapyd': '/logos/connectors/rapyd.svg',
@@ -90,7 +90,9 @@ export function ConnectorLogo({
   className,
   alt
 }: ConnectorLogoProps) {
-  const logoPath = CONNECTOR_LOGOS[connectorName.toLowerCase()]
+  // Match flexible, soporta minúsculas y también nombres "checkout.com"
+  const lookupName = connectorName.replace(/\s+/g, '').toLowerCase()
+  const logoPath = CONNECTOR_LOGOS[lookupName] ?? CONNECTOR_LOGOS[connectorName.toLowerCase()]
   const FallbackIcon = FALLBACK_ICONS[connectorType] || FALLBACK_ICONS.default
 
   const baseClasses = cn(
@@ -113,7 +115,7 @@ export function ConnectorLogo({
           onError={(e) => {
             // Si falla la carga de la imagen, mostrar fallback
             if (showFallback) {
-              e.currentTarget.style.display = 'none'
+              (e.currentTarget as HTMLImageElement).style.display = 'none'
             }
           }}
         />
@@ -149,3 +151,5 @@ export function ConnectorLogo({
 
   return null
 }
+
+export default ConnectorLogo
