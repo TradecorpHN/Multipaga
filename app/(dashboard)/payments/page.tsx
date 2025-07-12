@@ -1,66 +1,65 @@
 // app/(dashboard)/payments/page.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { 
-  CreditCard, 
-  Plus, 
-  Search, 
-  Filter, 
-  Download, 
-  RefreshCw,
-  MoreHorizontal,
-  Eye,
-  Copy,
-  Receipt,
-  XCircle,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
-  Calendar
+import { useState, useEffect, ChangeEvent } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  CreditCard, Plus, Search, Filter, Download, RefreshCw, MoreHorizontal,
+  Eye, Copy, Receipt, XCircle, CheckCircle, Clock, AlertCircle,
+  ArrowUpDown, ChevronLeft, ChevronRight, Calendar
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
+
+import { Button } from '@/presentation/components/ui/Button'
+import { Input } from '@/presentation/components/ui/Input'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  Card, CardContent, CardFooter, CardHeader, CardTitle
+} from '@/presentation/components/ui/Card'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Skeleton } from '@/presentation/components/ui/Skeleton'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger
+} from '@/presentation/components/ui/DropdownMenu'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar as CalendarComponent } from '@/components/ui/calendar'
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/presentation/components/ui/Select'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from '@/presentation/components/ui/Table'
+import { Checkbox } from '@/presentation/components/ui/Checkbox'
+import { Label } from '@/presentation/components/ui/Label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/presentation/components/ui/Popover'
+import { Calendar as CalendarComponent, DateRange } from '@/presentation/components/ui/Calendar'
+import { useToast } from '@/presentation/components/ui/use-toast'
+
 import { format } from 'date-fns'
-import { trpc } from '@/utils/trpc'
-import { formatCurrency, formatDate, cn } from '@/lib/utils'
-import { useToast } from '@/components/ui/use-toast'
-import { useDebounce } from '@/hooks/use-debounce'
+import { trpc } from '@/presentation/utils/trpc'
+import { useDebounce } from '@/presentation/hooks/use-debounce'
+
+// ========== Utilidades locales para Currency y Date ==========
+function formatCurrency(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount / 100)
+  } catch {
+    return `${(amount / 100).toFixed(2)} ${currency}`
+  }
+}
+function formatDate(date: string | Date) {
+  try {
+    return format(new Date(date), 'yyyy-MM-dd')
+  } catch {
+    return String(date)
+  }
+}
+function cn(...classes: any[]) {
+  return classes.filter(Boolean).join(' ')
+}
+// ============================================================
 
 // Payment status configurations
 const STATUS_CONFIG = {
@@ -86,9 +85,8 @@ interface PaymentFilters {
 
 export default function PaymentsPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { toast } = useToast()
-  
+
   const [selectedPayments, setSelectedPayments] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<PaymentFilters>({})
@@ -97,17 +95,14 @@ export default function PaymentsPage() {
   const [sortBy, setSortBy] = useState<'created_at' | 'amount'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [showFilters, setShowFilters] = useState(false)
-  
+
   const debouncedSearch = useDebounce(searchQuery, 300)
 
   // Build query parameters
-  const queryParams = {
+  const queryParams: Record<string, any> = {
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
-    ...(debouncedSearch && { 
-      customer_id: debouncedSearch,
-      // Could also search by payment_id if it matches a pattern
-    }),
+    ...(debouncedSearch && { customer_id: debouncedSearch }),
     ...(filters.status && filters.status.length > 0 && { status: filters.status }),
     ...(filters.currency && filters.currency.length > 0 && { currency: filters.currency }),
     ...(filters.amount_gte && { amount: { gte: filters.amount_gte * 100 } }),
@@ -120,88 +115,96 @@ export default function PaymentsPage() {
     }),
   }
 
-  // Fetch payments
+  // Queries y Mutaciones
   const { data: payments, isLoading, refetch } = trpc.payments.list.useQuery(queryParams)
 
-  // Fetch payment methods for filters
-  const { data: paymentMethods } = trpc.payments.methods.useQuery({})
-
-  // Export payments mutation
   const exportMutation = trpc.payments.export.useMutation({
-    onSuccess: (data) => {
-      // Download the exported file
-      const blob = new Blob([data.content], { type: 'text/csv' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `payments-export-${format(new Date(), 'yyyy-MM-dd')}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      
-      toast({
-        title: 'Export Successful',
-        description: 'Your payments have been exported.',
-      })
-    },
-    onError: (error) => {
-      toast({
-        title: 'Export Failed',
-        description: error.message,
-        variant: 'destructive',
-      })
-    },
-  })
+  onSuccess: (data: any) => {
+    const blob = new Blob([data.content], { type: data.contentType || 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = data.filename || `payments-export-${format(new Date(), 'yyyy-MM-dd')}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast({
+      title: 'Exportación exitosa',
+      description: 'Tus pagos han sido exportados correctamente.',
+    })
+  },
+  onError: (error: any) => {
+    toast({
+      title: 'Error en la exportación',
+      description: error.message,
+      variant: 'destructive',
+    })
+  },
+})
 
-  // Handle payment actions
+  const captureMutation = trpc.payments.capture
+    ? trpc.payments.capture.useMutation({
+        onSuccess: () => {
+          toast({ title: 'Payment Captured', description: 'The payment has been successfully captured.' })
+          refetch()
+        },
+        onError: () => {
+          toast({
+            title: 'Capture Failed',
+            description: 'Failed to capture the payment. Please try again.',
+            variant: 'destructive',
+          })
+        },
+      })
+    : undefined
+
+  const cancelMutation = trpc.payments.cancel
+    ? trpc.payments.cancel.useMutation({
+        onSuccess: () => {
+          toast({ title: 'Payment Cancelled', description: 'The payment has been cancelled.' })
+          refetch()
+        },
+        onError: () => {
+          toast({
+            title: 'Cancellation Failed',
+            description: 'Failed to cancel the payment. Please try again.',
+            variant: 'destructive',
+          })
+        },
+      })
+    : undefined
+
+  // ⬇️ Corregido: siempre paymentId, nunca payment_id
   const handleCapturePayment = async (paymentId: string) => {
-    try {
-      await trpc.payments.capture.mutate({ payment_id: paymentId })
-      toast({
-        title: 'Payment Captured',
-        description: 'The payment has been successfully captured.',
-      })
-      refetch()
-    } catch (error) {
-      toast({
-        title: 'Capture Failed',
-        description: 'Failed to capture the payment. Please try again.',
-        variant: 'destructive',
-      })
-    }
+    if (!captureMutation) return
+    captureMutation.mutate({ paymentId })
   }
 
+  // ⬇️ Corregido: siempre paymentId, nunca payment_id
   const handleCancelPayment = async (paymentId: string) => {
-    try {
-      await trpc.payments.cancel.mutate({ 
-        payment_id: paymentId,
-        cancellation_reason: 'requested_by_customer',
-      })
-      toast({
-        title: 'Payment Cancelled',
-        description: 'The payment has been cancelled.',
-      })
-      refetch()
-    } catch (error) {
-      toast({
-        title: 'Cancellation Failed',
-        description: 'Failed to cancel the payment. Please try again.',
-        variant: 'destructive',
-      })
-    }
+    if (!cancelMutation) return
+    cancelMutation.mutate({
+      paymentId,
+      cancellation_reason: 'requested_by_customer',
+    })
   }
 
   const handleCreateRefund = (paymentId: string) => {
     router.push(`/refunds/new?payment_id=${paymentId}`)
   }
 
-  const handleExport = () => {
-    exportMutation.mutate({
-      filters: queryParams,
-      format: 'csv',
-    })
+const handleExport = () => {
+  if (!exportMutation) {
+    toast({ title: 'Export not available' })
+    return
   }
+  exportMutation.mutate({
+    ...queryParams, 
+    format: 'csv',
+  })
+}
+
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -212,22 +215,21 @@ export default function PaymentsPage() {
   }
 
   const handleSelectAll = () => {
-    if (selectedPayments.length === payments?.data.length) {
+    if (selectedPayments.length === (payments?.data?.length || 0)) {
       setSelectedPayments([])
     } else {
-      setSelectedPayments(payments?.data.map(p => p.payment_id) || [])
+      setSelectedPayments(payments?.data?.map((p: any) => p.payment_id) || [])
     }
   }
 
   const handleSelectPayment = (paymentId: string) => {
-    setSelectedPayments(prev => 
-      prev.includes(paymentId) 
+    setSelectedPayments(prev =>
+      prev.includes(paymentId)
         ? prev.filter(id => id !== paymentId)
         : [...prev, paymentId]
     )
   }
 
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
   }, [filters, debouncedSearch])
@@ -262,12 +264,9 @@ export default function PaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{payments?.total_count || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Across all statuses
-            </p>
+            <p className="text-xs text-muted-foreground">Across all statuses</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Successful</CardTitle>
@@ -275,14 +274,11 @@ export default function PaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {payments?.data.filter(p => p.status === 'succeeded').length || 0}
+              {payments?.data?.filter((p: any) => p.status === 'succeeded').length || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Completed payments
-            </p>
+            <p className="text-xs text-muted-foreground">Completed payments</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending</CardTitle>
@@ -290,14 +286,13 @@ export default function PaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {payments?.data.filter(p => ['processing', 'requires_capture'].includes(p.status)).length || 0}
+              {payments?.data?.filter((p: any) =>
+                ['processing', 'requires_capture'].includes(p.status)
+              ).length || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Awaiting action
-            </p>
+            <p className="text-xs text-muted-foreground">Awaiting action</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Failed</CardTitle>
@@ -305,11 +300,9 @@ export default function PaymentsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {payments?.data.filter(p => p.status === 'failed').length || 0}
+              {payments?.data?.filter((p: any) => p.status === 'failed').length || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Failed transactions
-            </p>
+            <p className="text-xs text-muted-foreground">Failed transactions</p>
           </CardContent>
         </Card>
       </div>
@@ -324,7 +317,7 @@ export default function PaymentsPage() {
                 <Input
                   placeholder="Search by payment ID, customer ID..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                   className="pl-9"
                 />
               </div>
@@ -365,7 +358,6 @@ export default function PaymentsPage() {
             </div>
           </div>
         </CardHeader>
-
         {showFilters && (
           <CardContent className="border-t">
             <div className="grid gap-4 md:grid-cols-4 pt-4">
@@ -373,7 +365,7 @@ export default function PaymentsPage() {
                 <Label>Status</Label>
                 <Select
                   value={filters.status?.[0] || 'all'}
-                  onValueChange={(value) => 
+                  onValueChange={(value: string) =>
                     setFilters(prev => ({
                       ...prev,
                       status: value === 'all' ? undefined : [value]
@@ -393,12 +385,11 @@ export default function PaymentsPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-2">
                 <Label>Currency</Label>
                 <Select
                   value={filters.currency?.[0] || 'all'}
-                  onValueChange={(value) => 
+                  onValueChange={(value: string) =>
                     setFilters(prev => ({
                       ...prev,
                       currency: value === 'all' ? undefined : [value]
@@ -417,7 +408,6 @@ export default function PaymentsPage() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-2">
                 <Label>Amount Range</Label>
                 <div className="flex gap-2">
@@ -425,7 +415,7 @@ export default function PaymentsPage() {
                     type="number"
                     placeholder="Min"
                     value={filters.amount_gte || ''}
-                    onChange={(e) => 
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
                       setFilters(prev => ({
                         ...prev,
                         amount_gte: e.target.value ? Number(e.target.value) : undefined
@@ -436,7 +426,7 @@ export default function PaymentsPage() {
                     type="number"
                     placeholder="Max"
                     value={filters.amount_lte || ''}
-                    onChange={(e) => 
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
                       setFilters(prev => ({
                         ...prev,
                         amount_lte: e.target.value ? Number(e.target.value) : undefined
@@ -445,7 +435,6 @@ export default function PaymentsPage() {
                   />
                 </div>
               </div>
-
               <div className="space-y-2">
                 <Label>Date Range</Label>
                 <Popover>
@@ -462,11 +451,12 @@ export default function PaymentsPage() {
                   <PopoverContent className="w-auto p-0" align="start">
                     <CalendarComponent
                       mode="range"
-                      selected={{
-                        from: filters.date_from,
-                        to: filters.date_to,
-                      }}
-                      onSelect={(range: any) => {
+                      selected={
+                        filters.date_from && filters.date_to
+                          ? { from: filters.date_from, to: filters.date_to }
+                          : undefined
+                      }
+                      onSelect={(range: DateRange | undefined) => {
                         setFilters(prev => ({
                           ...prev,
                           date_from: range?.from,
@@ -479,12 +469,8 @@ export default function PaymentsPage() {
                 </Popover>
               </div>
             </div>
-
             <div className="flex justify-end mt-4 gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setFilters({})}
-              >
+              <Button variant="outline" onClick={() => setFilters({})}>
                 Clear Filters
               </Button>
               <Button onClick={() => refetch()}>
@@ -504,7 +490,7 @@ export default function PaymentsPage() {
                 <TableRow>
                   <TableHead className="w-12">
                     <Checkbox
-                      checked={selectedPayments.length === payments?.data.length && payments?.data.length > 0}
+                      checked={selectedPayments.length === (payments?.data?.length || 0) && (payments?.data?.length || 0) > 0}
                       onCheckedChange={handleSelectAll}
                     />
                   </TableHead>
@@ -558,17 +544,16 @@ export default function PaymentsPage() {
                       </TableCell>
                     </TableRow>
                   ))
-                ) : payments?.data.length === 0 ? (
+                ) : (payments?.data?.length || 0) === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-8">
                       <p className="text-muted-foreground">No payments found</p>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  payments?.data.map((payment) => {
+                  payments?.data.map((payment: any) => {
                     const statusConfig = STATUS_CONFIG[payment.status as keyof typeof STATUS_CONFIG]
                     const StatusIcon = statusConfig?.icon || AlertCircle
-                    
                     return (
                       <TableRow key={payment.payment_id}>
                         <TableCell>
@@ -595,8 +580,8 @@ export default function PaymentsPage() {
                         <TableCell>
                           {payment.customer_id ? (
                             <div>
-                              <p className="font-medium">{payment.customer.email || payment.customer_id}</p>
-                              {payment.customer.name && (
+                              <p className="font-medium">{payment.customer?.email || payment.customer_id}</p>
+                              {payment.customer?.name && (
                                 <p className="text-xs text-muted-foreground">{payment.customer.name}</p>
                               )}
                             </div>
@@ -713,7 +698,7 @@ export default function PaymentsPage() {
               <Input
                 type="number"
                 value={currentPage}
-                onChange={(e) => setCurrentPage(Number(e.target.value))}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setCurrentPage(Number(e.target.value))}
                 className="w-16 text-center"
                 min={1}
                 max={Math.ceil((payments?.total_count || 0) / pageSize)}

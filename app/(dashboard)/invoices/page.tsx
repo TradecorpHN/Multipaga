@@ -1,38 +1,15 @@
-// app/(dashboard)/invoices/page.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { 
-  FileText, 
-  Plus, 
-  Search, 
-  Filter, 
-  Download,
-  RefreshCw,
-  MoreHorizontal,
-  Eye,
-  Send,
-  Copy,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertCircle,
-  Mail,
-  DollarSign,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  Printer,
-  Edit,
-  Trash2
+import {
+  FileText, Plus, Search, Filter, Download, RefreshCw, MoreHorizontal, Eye, Copy, CheckCircle, XCircle, Clock, AlertCircle, Mail, DollarSign, Calendar, ChevronLeft, ChevronRight, Printer, Edit
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/presentation/components/ui/Button'
+import { Input } from '@/presentation/components/ui/Input'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Skeleton } from '@/presentation/components/ui/Skeleton'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,14 +17,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from '@/presentation/components/ui/DropdownMenu'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from '@/presentation/components/ui/Select'
 import {
   Table,
   TableBody,
@@ -55,24 +32,49 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar as CalendarComponent } from '@/components/ui/calendar'
+} from '@/presentation/components/ui/Table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/presentation/components/ui/Tabs'
+import { Label } from '@/presentation/components/ui/Label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/presentation/components/ui/Popover'
+import { Calendar as CalendarComponent } from '@/presentation/components/ui/Calendar'
 import { format } from 'date-fns'
-import { trpc } from '@/utils/trpc'
-import { formatCurrency, formatDate, cn } from '@/lib/utils'
-import { useToast } from '@/components/ui/use-toast'
-import { useDebounce } from '@/hooks/use-debounce'
+import { trpc } from '@/presentation/utils/trpc'
+import { cn } from '@/presentation/lib/utils'
+import { useToast } from '@/presentation/components/ui/use-toast'
+import { useDebounce } from '@/presentation/hooks/useDebounce'
 
-// Invoice status configurations
+function formatCurrency(value: number, currency: string = 'USD') {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value / 100)
+}
+function formatDate(date: number | string | Date) {
+  if (!date) return '-'
+  const d = typeof date === 'number' ? new Date(date) : new Date(date)
+  return format(d, 'MMM d, yyyy')
+}
+
+type DateRange = { from?: Date; to?: Date }
+
 const STATUS_CONFIG = {
   draft: { label: 'Draft', variant: 'secondary' as const, icon: Clock },
   open: { label: 'Open', variant: 'default' as const, icon: AlertCircle },
   paid: { label: 'Paid', variant: 'success' as const, icon: CheckCircle },
   uncollectible: { label: 'Uncollectible', variant: 'destructive' as const, icon: XCircle },
   void: { label: 'Void', variant: 'secondary' as const, icon: XCircle },
+}
+
+interface InvoiceType {
+  id: string
+  number?: string
+  customer: string
+  customer_name?: string
+  customer_email?: string
+  amount_due: number
+  total: number
+  amount_paid: number
+  currency: string
+  status: keyof typeof STATUS_CONFIG | string
+  due_date?: number
+  created: number
 }
 
 interface InvoiceFilters {
@@ -88,112 +90,57 @@ interface InvoiceFilters {
 export default function InvoicesPage() {
   const router = useRouter()
   const { toast } = useToast()
-  
+
   const [selectedInvoices, setSelectedInvoices] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<InvoiceFilters>({})
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize] = useState(20)
   const [activeTab, setActiveTab] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
-  
+
   const debouncedSearch = useDebounce(searchQuery, 300)
 
-  // Build query parameters
   const queryParams = {
     limit: pageSize,
-    starting_after: currentPage > 1 ? ((currentPage - 1) * pageSize).toString() : undefined,
-    ...(debouncedSearch && { 
-      search: debouncedSearch,
-    }),
-    ...(filters.status && filters.status.length > 0 && { 
-      status: filters.status 
-    }),
-    ...(filters.currency && filters.currency.length > 0 && { 
-      currency: filters.currency 
-    }),
-    ...(filters.customer_id && { customer: filters.customer_id }),
-    ...(filters.due_date_gte && filters.due_date_lte && {
-      due_date: {
-        gte: Math.floor(filters.due_date_gte.getTime() / 1000),
-        lte: Math.floor(filters.due_date_lte.getTime() / 1000),
-      }
-    }),
+    offset: (currentPage - 1) * pageSize,
+    ...(debouncedSearch && { search: debouncedSearch }),
+    ...(filters.status && filters.status.length > 0 && { status: filters.status }),
+    ...(filters.currency && filters.currency.length > 0 && { currency: filters.currency[0] }),
+    ...(filters.customer_id && { customer_id: filters.customer_id }),
+    ...(filters.due_date_gte && { due_date_gte: Math.floor(filters.due_date_gte.getTime() / 1000) }),
+    ...(filters.due_date_lte && { due_date_lte: Math.floor(filters.due_date_lte.getTime() / 1000) }),
   }
 
-  // Fetch invoices
   const { data: invoices, isLoading, refetch } = trpc.invoices.list.useQuery(queryParams)
+const { data: stats } = trpc.invoices.stats.useQuery({})
 
-  // Fetch invoice statistics
-  const { data: stats } = trpc.invoices.stats.useQuery({})
 
-  // Send invoice mutation
-  const sendMutation = trpc.invoices.send.useMutation({
+  // Cancelar (equivalente a "void")
+  const cancelMutation = trpc.payments.cancel.useMutation({
     onSuccess: () => {
       toast({
-        title: 'Invoice Sent',
-        description: 'The invoice has been sent to the customer.',
+        title: 'Payment Cancelled',
+        description: 'The payment/invoice has been cancelled.',
       })
       refetch()
     },
-    onError: (error) => {
+    onError: (error: { message: string }) => {
       toast({
-        title: 'Send Failed',
+        title: 'Cancel Failed',
         description: error.message,
         variant: 'destructive',
       })
     },
   })
 
-  // Void invoice mutation
-  const voidMutation = trpc.invoices.void.useMutation({
-    onSuccess: () => {
-      toast({
-        title: 'Invoice Voided',
-        description: 'The invoice has been voided successfully.',
-      })
-      refetch()
-    },
-    onError: (error) => {
-      toast({
-        title: 'Void Failed',
-        description: error.message,
-        variant: 'destructive',
-      })
-    },
-  })
+  // Si necesitas delete, implementa en tu backend. Por defecto no existe en Hyperswitch.
 
-  // Delete invoice mutation
-  const deleteMutation = trpc.invoices.delete.useMutation({
-    onSuccess: () => {
-      toast({
-        title: 'Invoice Deleted',
-        description: 'The invoice has been deleted.',
-      })
-      refetch()
-    },
-    onError: (error) => {
-      toast({
-        title: 'Delete Failed',
-        description: error.message,
-        variant: 'destructive',
-      })
-    },
-  })
+  // Para "enviar" factura, implementa tu propio método/email service aquí si lo necesitas.
 
-  const handleSendInvoice = (invoiceId: string) => {
-    sendMutation.mutate({ invoice_id: invoiceId })
-  }
-
-  const handleVoidInvoice = (invoiceId: string) => {
-    if (confirm('Are you sure you want to void this invoice? This action cannot be undone.')) {
-      voidMutation.mutate({ invoice_id: invoiceId })
-    }
-  }
-
-  const handleDeleteInvoice = (invoiceId: string) => {
-    if (confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
-      deleteMutation.mutate({ invoice_id: invoiceId })
+  const handleCancelInvoice = (invoiceId: string) => {
+    if (confirm('Are you sure you want to cancel this invoice? This action cannot be undone.')) {
+      cancelMutation.mutate({ paymentId: invoiceId })
     }
   }
 
@@ -210,7 +157,7 @@ export default function InvoicesPage() {
     })
   }
 
-  const getDaysOverdue = (dueDate?: number) => {
+  const getDaysOverdue = (dueDate?: number): number | null => {
     if (!dueDate) return null
     const due = new Date(dueDate * 1000)
     const now = new Date()
@@ -218,7 +165,7 @@ export default function InvoicesPage() {
     return days > 0 ? days : null
   }
 
-  const filteredInvoices = invoices?.data.filter(invoice => {
+  const filteredInvoices: InvoiceType[] = invoices?.data?.filter((invoice: InvoiceType) => {
     if (activeTab === 'draft') return invoice.status === 'draft'
     if (activeTab === 'open') return invoice.status === 'open'
     if (activeTab === 'paid') return invoice.status === 'paid'
@@ -226,7 +173,7 @@ export default function InvoicesPage() {
       return invoice.status === 'open' && getDaysOverdue(invoice.due_date) !== null
     }
     return true
-  })
+  }) ?? []
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
@@ -265,7 +212,6 @@ export default function InvoicesPage() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Overdue</CardTitle>
@@ -280,7 +226,6 @@ export default function InvoicesPage() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Paid This Month</CardTitle>
@@ -295,7 +240,6 @@ export default function InvoicesPage() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Collection Rate</CardTitle>
@@ -390,7 +334,7 @@ export default function InvoicesPage() {
                     <Label>Status</Label>
                     <Select
                       value={filters.status?.[0] || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
                           status: value === 'all' ? undefined : [value]
@@ -410,12 +354,11 @@ export default function InvoicesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Currency</Label>
                     <Select
                       value={filters.currency?.[0] || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
                           currency: value === 'all' ? undefined : [value]
@@ -434,7 +377,6 @@ export default function InvoicesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Due Date Range</Label>
                     <Popover>
@@ -455,7 +397,7 @@ export default function InvoicesPage() {
                             from: filters.due_date_gte,
                             to: filters.due_date_lte,
                           }}
-                          onSelect={(range: any) => {
+                          onSelect={(range: DateRange | undefined) => {
                             setFilters(prev => ({
                               ...prev,
                               due_date_gte: range?.from,
@@ -467,13 +409,12 @@ export default function InvoicesPage() {
                       </PopoverContent>
                     </Popover>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Customer</Label>
                     <Input
                       placeholder="Customer ID"
                       value={filters.customer_id || ''}
-                      onChange={(e) => 
+                      onChange={(e) =>
                         setFilters(prev => ({
                           ...prev,
                           customer_id: e.target.value || undefined
@@ -482,7 +423,6 @@ export default function InvoicesPage() {
                     />
                   </div>
                 </div>
-
                 <div className="flex justify-end mt-4 gap-2">
                   <Button
                     variant="outline"
@@ -505,10 +445,10 @@ export default function InvoicesPage() {
                       <TableHead className="w-12">
                         <input
                           type="checkbox"
-                          checked={selectedInvoices.length === filteredInvoices?.length && filteredInvoices?.length > 0}
-                          onChange={(e) => {
+                          checked={selectedInvoices.length === filteredInvoices.length && filteredInvoices.length > 0}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             if (e.target.checked) {
-                              setSelectedInvoices(filteredInvoices?.map(i => i.id) || [])
+                              setSelectedInvoices(filteredInvoices.map(i => i.id))
                             } else {
                               setSelectedInvoices([])
                             }
@@ -534,13 +474,13 @@ export default function InvoicesPage() {
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : filteredInvoices?.length === 0 ? (
+                    ) : filteredInvoices.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-muted-foreground">No invoices found</p>
                           {activeTab === 'all' && (
-                            <Button 
-                              className="mt-4" 
+                            <Button
+                              className="mt-4"
                               onClick={() => router.push('/invoices/create')}
                             >
                               Create Your First Invoice
@@ -549,18 +489,17 @@ export default function InvoicesPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredInvoices?.map((invoice) => {
+                      filteredInvoices.map((invoice: InvoiceType) => {
                         const statusConfig = STATUS_CONFIG[invoice.status as keyof typeof STATUS_CONFIG]
                         const StatusIcon = statusConfig?.icon || AlertCircle
                         const daysOverdue = getDaysOverdue(invoice.due_date)
-                        
                         return (
                           <TableRow key={invoice.id}>
                             <TableCell>
                               <input
                                 type="checkbox"
                                 checked={selectedInvoices.includes(invoice.id)}
-                                onChange={(e) => {
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                                   if (e.target.checked) {
                                     setSelectedInvoices([...selectedInvoices, invoice.id])
                                   } else {
@@ -609,7 +548,6 @@ export default function InvoicesPage() {
                                   "h-4 w-4",
                                   statusConfig?.variant === 'success' && "text-green-600",
                                   statusConfig?.variant === 'destructive' && "text-red-600",
-                                  statusConfig?.variant === 'warning' && "text-yellow-600",
                                   statusConfig?.variant === 'secondary' && "text-muted-foreground"
                                 )} />
                                 <Badge variant={statusConfig?.variant || 'secondary'}>
@@ -625,7 +563,7 @@ export default function InvoicesPage() {
                             <TableCell>
                               {invoice.due_date ? (
                                 <div className={cn(
-                                  daysOverdue && "text-destructive font-medium"
+                                  daysOverdue ? "text-destructive font-medium" : undefined
                                 )}>
                                   {format(new Date(invoice.due_date * 1000), 'MMM d, yyyy')}
                                 </div>
@@ -663,17 +601,11 @@ export default function InvoicesPage() {
                                         <Edit className="mr-2 h-4 w-4" />
                                         Edit Invoice
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() => handleSendInvoice(invoice.id)}
-                                      >
-                                        <Send className="mr-2 h-4 w-4" />
-                                        Send Invoice
-                                      </DropdownMenuItem>
                                     </>
                                   )}
                                   {invoice.status === 'open' && (
                                     <DropdownMenuItem
-                                      onClick={() => handleSendInvoice(invoice.id)}
+                                      onClick={() => {/* implementa tu propio reminder o reenvío aquí si lo necesitas */}}
                                     >
                                       <Mail className="mr-2 h-4 w-4" />
                                       Send Reminder
@@ -686,22 +618,14 @@ export default function InvoicesPage() {
                                   <DropdownMenuSeparator />
                                   {['draft', 'open'].includes(invoice.status) && (
                                     <DropdownMenuItem
-                                      onClick={() => handleVoidInvoice(invoice.id)}
+                                      onClick={() => handleCancelInvoice(invoice.id)}
                                       className="text-destructive"
                                     >
                                       <XCircle className="mr-2 h-4 w-4" />
-                                      Void Invoice
+                                      Cancel Invoice
                                     </DropdownMenuItem>
                                   )}
-                                  {invoice.status === 'draft' && (
-                                    <DropdownMenuItem
-                                      onClick={() => handleDeleteInvoice(invoice.id)}
-                                      className="text-destructive"
-                                    >
-                                      <Trash2 className="mr-2 h-4 w-4" />
-                                      Delete Invoice
-                                    </DropdownMenuItem>
-                                  )}
+                                  {/* Solo incluye delete si tienes backend propio */}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>

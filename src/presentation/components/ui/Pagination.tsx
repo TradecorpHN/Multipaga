@@ -673,7 +673,7 @@ export {
   PaginationEllipsis,
   CompletePagination,
   SimplePagination,
-  usePagination,
+  
 }
 
 export type {

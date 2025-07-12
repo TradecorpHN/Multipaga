@@ -1,13 +1,9 @@
-// src/presentation/components/ui/ToastProvider.tsx
-
 import React, {
   createContext,
   useContext,
   useCallback,
   useState,
   ReactNode,
-  useRef,
-  useEffect,
 } from "react"
 
 export type ToastType = "success" | "error" | "info" | "warning"
@@ -16,7 +12,7 @@ export interface ToastData {
   id: string
   message: string
   type: ToastType
-  duration?: number // ms
+  duration?: number
   actionLabel?: string
   onAction?: () => void
 }
@@ -25,15 +21,10 @@ interface ToastContextProps {
   toasts: ToastData[]
   showToast: (toast: Omit<ToastData, "id">) => void
   removeToast: (id: string) => void
+  toast: (toast: Omit<ToastData, "id">) => void
 }
 
 const ToastContext = createContext<ToastContextProps | undefined>(undefined)
-
-export const useToastContext = (): ToastContextProps => {
-  const ctx = useContext(ToastContext)
-  if (!ctx) throw new Error("useToastContext must be used within ToastProvider")
-  return ctx
-}
 
 let idCounter = 0
 function genId() {
@@ -44,6 +35,10 @@ function genId() {
 export const ToastProvider = ({ children }: { children: ReactNode }) => {
   const [toasts, setToasts] = useState<ToastData[]>([])
 
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
   const showToast = useCallback(
     (toast: Omit<ToastData, "id">) => {
       const id = genId()
@@ -51,34 +46,45 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
       const duration = toast.duration ?? 4000
       setTimeout(() => removeToast(id), duration)
     },
-    []
+    [removeToast]
   )
 
-  const removeToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
+  // El valor incluye el alias `toast` para uso universal
+  const value: ToastContextProps = {
+    toasts,
+    showToast,
+    removeToast,
+    toast: showToast,
+  }
 
   return (
-    <ToastContext.Provider value={{ toasts, showToast, removeToast }}>
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>
   )
 }
 
-// ----------------------------
-// COMPONENTE ToastContainer
-// ----------------------------
+// --- Hook universal ---
+// Puedes importar este hook en cualquier componente y usarlo directamente.
+export function useToast() {
+  const ctx = useContext(ToastContext)
+  if (!ctx) throw new Error("useToast must be used within ToastProvider")
+  return ctx.toast
+}
+
+// --- ToastContainer ---
+// Igual que antes, puedes mejorar el diseño/animaciones como prefieras.
 interface ToastContainerProps {
   toasts: ToastData[]
   removeToast: (id: string) => void
 }
 
 const typeStyles: Record<ToastType, string> = {
-  success: "bg-green-600 border-green-500",
-  error: "bg-red-600 border-red-500",
-  info: "bg-blue-600 border-blue-500",
-  warning: "bg-yellow-500 border-yellow-400 text-black",
+  success: "bg-green-600 border-green-500 text-white",
+  error: "bg-red-600 border-red-500 text-white",
+  info: "bg-blue-600 border-blue-500 text-white",
+  warning: "bg-yellow-400 border-yellow-300 text-black",
 }
 
 const iconMap: Record<ToastType, JSX.Element> = {
@@ -105,7 +111,6 @@ const iconMap: Record<ToastType, JSX.Element> = {
 }
 
 const ToastContainer = ({ toasts, removeToast }: ToastContainerProps) => {
-  // Animación avanzada de entrada/salida
   return (
     <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none">
       {toasts.map(toast => (
@@ -138,7 +143,6 @@ const ToastContainer = ({ toasts, removeToast }: ToastContainerProps) => {
           </button>
         </div>
       ))}
-      {/* Animación de entrada usando Tailwind animate-toast-in (custom abajo) */}
       <style>{`
         @keyframes toast-in {
           from { transform: translateY(-40px) scale(0.95); opacity:0; }

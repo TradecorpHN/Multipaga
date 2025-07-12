@@ -1,7 +1,8 @@
 // types/hyperswitch.ts
 // ──────────────────────────────────────────────────────────────────────────────
-// Tipos base según OpenAPI de Hyperswitch
+// Tipos base según OpenAPI de Hyperswitch - VERSIÓN CORREGIDA
 // ──────────────────────────────────────────────────────────────────────────────
+
 export type CaptureMethod =
   | 'automatic'
   | 'manual'
@@ -9,8 +10,6 @@ export type CaptureMethod =
   | 'scheduled'
   | 'sequential_automatic'
 
-
-  
 export type Currency =
   | 'USD'
   | 'EUR'
@@ -165,12 +164,10 @@ export type Connector =
   | 'xendit'
   | 'zen'
   | 'plaid'
-  | 'zsl';
-
-
+  | 'zsl'
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Interfaces para Payments
+// Interfaces para Payments - CORREGIDAS
 // ──────────────────────────────────────────────────────────────────────────────
 
 export interface PaymentListRequest {
@@ -183,6 +180,13 @@ export interface PaymentListRequest {
   created_gt?: string
   created_lte?: string
   created_gte?: string
+  status?: PaymentStatus[]
+  currency?: Currency[]
+  payment_method?: PaymentMethod[]
+  amount?: {
+    gte?: number
+    lte?: number
+  }
 }
 
 export interface PaymentRequest {
@@ -223,7 +227,7 @@ export interface PaymentResponse {
   order_details?: OrderDetails[]
   customer_id?: string
   connector_transaction_id?: string
-  payment_method?: PaymentMethodData
+  payment_method?: PaymentMethodResponseData // Cambiado para incluir más información
   error_code?: string
   error_message?: string
   next_action?: NextActionData
@@ -250,6 +254,25 @@ export interface PaymentResponse {
   frm_message?: FrmMessage
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// NUEVO: PaymentMethodResponseData con información completa
+// ──────────────────────────────────────────────────────────────────────────────
+export interface PaymentMethodResponseData {
+  type: PaymentMethod // AGREGADO: Propiedad 'type' faltante
+  card?: CardResponseDetails // CAMBIADO: CardResponseDetails en lugar de CardDetails
+  wallet?: WalletDetails
+  pay_later?: PayLaterDetails
+  bank_redirect?: BankRedirectDetails
+  bank_transfer?: BankTransferDetails
+  crypto?: CryptoDetails
+  bank_debit?: BankDebitDetails
+  reward?: RewardDetails
+  upi?: UpiDetails
+  voucher?: VoucherDetails
+  gift_card?: GiftCardDetails
+  mobile_payment?: MobilePaymentDetails
+}
+
 export interface PaymentMethodData {
   card?: CardDetails
   wallet?: WalletDetails
@@ -265,6 +288,9 @@ export interface PaymentMethodData {
   mobile_payment?: MobilePaymentDetails
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// CORREGIDO: CardDetails con propiedades para entrada
+// ──────────────────────────────────────────────────────────────────────────────
 export interface CardDetails {
   card_number?: string
   card_exp_month?: string
@@ -279,6 +305,28 @@ export interface CardDetails {
   nick_name?: string
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// NUEVO: CardResponseDetails con propiedades de respuesta
+// ──────────────────────────────────────────────────────────────────────────────
+export interface CardResponseDetails {
+  last4: string // AGREGADO: Propiedad 'last4' faltante
+  card_exp_month?: string
+  card_exp_year?: string
+  card_holder_name?: string
+  card_issuer?: string
+  card_network?: string
+  card_type?: string
+  card_issuing_country?: string
+  bank_code?: string
+  nick_name?: string
+  // Información adicional solo en respuestas
+  brand?: string
+  funding?: 'credit' | 'debit' | 'prepaid' | 'unknown'
+  country?: string
+  exp_month?: number
+  exp_year?: number
+}
+
 export interface WebhookDetails {
   webhook_version?: string
   webhook_username?: string
@@ -288,6 +336,7 @@ export interface WebhookDetails {
   payment_succeeded_enabled?: boolean
   payment_failed_enabled?: boolean
 }
+
 export interface RoutingAlgorithm {
   [key: string]: any
 }
@@ -317,9 +366,8 @@ export interface PaypalDetails {
   experience_context?: PaypalExperienceContext
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
-// Interfaces para Customer
+// Interfaces para Customer - CORREGIDAS
 // ──────────────────────────────────────────────────────────────────────────────
 
 export interface CustomerDetails {
@@ -356,7 +404,6 @@ export interface CustomerResponse {
   default_payment_method_id?: string
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Interfaces para Address, Billing y Shipping
 // ──────────────────────────────────────────────────────────────────────────────
@@ -390,7 +437,6 @@ export interface PhoneDetails {
   number?: string
   country_code?: string
 }
-
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Interfaces para Disputes
@@ -448,7 +494,6 @@ export interface DisputeEvidenceRequest {
   submitted_at: string
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Interfaces para Refunds
 // ──────────────────────────────────────────────────────────────────────────────
@@ -490,7 +535,6 @@ export interface RefundResponse {
   merchant_connector_id?: string
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Interfaces para Webhooks
 // ──────────────────────────────────────────────────────────────────────────────
@@ -530,7 +574,6 @@ export interface WebhookResponse {
   last_modified: string
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Interfaces para Analytics
 // ──────────────────────────────────────────────────────────────────────────────
@@ -568,7 +611,6 @@ export interface AnalyticsMetaData {
   column_name: string
   data_type: string
 }
-
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Interfaces adicionales: NextActionData & más
@@ -703,7 +745,6 @@ export interface Charges {
   charge_currency: Currency
 }
 
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Interfaces para errores y payloads de webhook
 // ──────────────────────────────────────────────────────────────────────────────
@@ -735,28 +776,21 @@ export interface WebhookPayload {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ProfileAcquirerResponse (components.schemas.ProfileAcquirerResponse) :contentReference[oaicite:0]{index=0}
+// ProfileAcquirerResponse & ProfileResponse - CORREGIDOS
 // ──────────────────────────────────────────────────────────────────────────────
+
 export interface ProfileAcquirerResponse {
-  /** Unique identifier of the profile acquirer */
   profile_acquirer_id: string
-  /** Merchant ID assigned by the acquirer */
   acquirer_assigned_merchant_id: string
-  /** Merchant name */
   merchant_name: string
-  /** Merchant country code assigned by acquirer */
   merchant_country_code: string
-  /** Network provider (e.g., VISA, MASTERCARD) */
   network: string
-  /** Acquirer BIN */
   acquirer_bin: string
-  /** Acquirer ICA, si está disponible */
   acquirer_ica?: string | null
-  /** Fraud rate for this acquirer configuration */
   acquirer_fraud_rate: number
-  /** Parent profile ID */
   profile_id: string
 }
+
 export interface AuthenticationConnectorDetails {
   authentication_connectors: (
     | 'threedsecureio'
@@ -770,8 +804,8 @@ export interface AuthenticationConnectorDetails {
   three_ds_requestor_url: string
   three_ds_requestor_app_url?: string
 }
+
 export interface BusinessPaymentLinkConfig {
-  // campos de PaymentLinkConfigRequest (theme, logo, seller_name, etc.)
   theme?: string
   logo?: string
   seller_name?: string
@@ -781,8 +815,6 @@ export interface BusinessPaymentLinkConfig {
   show_card_terms?: boolean
   is_setup_mandate_flow?: boolean
   color_icon_card_cvc_error?: string
-
-  // campos añadidos en BusinessPaymentLinkConfig
   allowed_domains?: string[]
   branding_visibility?: boolean
   card_holder_name_label?: string
@@ -792,60 +824,26 @@ export interface BusinessPaymentLinkConfig {
   env?: string
   domain_name?: string
 }
-export interface ProfileAcquirerResponse {
-  profile_acquirer_id: string
-  acquirer_assigned_merchant_id: string
-  merchant_name: string
-  merchant_country_code: string
-  network: string
-  acquirer_bin: string
-  acquirer_ica?: string | null
-  acquirer_fraud_rate: number
-  profile_id: string
-}
-// ──────────────────────────────────────────────────────────────────────────────
-// ProfileResponse (components.schemas.ProfileResponse)
-// ──────────────────────────────────────────────────────────────────────────────
+
 export interface ProfileResponse {
   merchant_id: string
   profile_id: string
   profile_name: string
   return_url?: string
-
-  // Configuración de seguridad
   enable_payment_response_hash: boolean
   payment_response_hash_key?: string
   redirect_to_merchant_with_http_post: boolean
-
-  // Tu propiedad adicional para CVV (si la usas en tu lógica)
   should_collect_cvv_during_payment?: boolean
-
-  // Detalles de webhook
   webhook_details?: WebhookDetails
   outgoing_webhook_custom_http_headers?: Record<string, string>
-
   metadata?: Record<string, any>
-
-  // Autenticación 3DS
   authentication_connector_details?: AuthenticationConnectorDetails
-
-  // Routing
   routing_algorithm?: RoutingAlgorithm
-
-  // Tiempos de ejecución
   intent_fulfillment_time?: number
   order_fulfillment_time?: number
-
-  // Apple Pay
   applepay_verified_domains?: string[]
-
-  // Advanced config
   payment_link_config?: BusinessPaymentLinkConfig
-
-  // Recon Service
   is_recon_enabled?: boolean
-
-  // Flags varias
   is_tax_connector_enabled: boolean
   is_network_tokenization_enabled: boolean
   is_auto_retries_enabled: boolean
@@ -853,68 +851,127 @@ export interface ProfileResponse {
   is_clear_pan_retries_enabled: boolean
   force_3ds_challenge: boolean
   is_pre_network_tokenization_enabled: boolean
-
-  // Acquirers
   acquirer_configs?: ProfileAcquirerResponse[]
-
-  // IFrame y categoría
   is_iframe_redirection_enabled?: boolean
   merchant_category_code?: string
-}
-// ──────────────────────────────────────────────────────────────────────────────
-// ProfileResponse (components.schemas.ProfileResponse)
-// ──────────────────────────────────────────────────────────────────────────────
-export interface ProfileResponse {
-  merchant_id: string
-  profile_id: string
-  profile_name: string
-  return_url?: string
-  enable_payment_response_hash: boolean
-  payment_response_hash_key?: string
-  redirect_to_merchant_with_http_post: boolean
-  webhook_details?: WebhookDetails
-  metadata?: Record<string, any>
-  is_tax_connector_enabled: boolean
-  is_network_tokenization_enabled: boolean
-  is_auto_retries_enabled: boolean
-  is_click_to_pay_enabled: boolean
-  is_clear_pan_retries_enabled: boolean
-  force_3ds_challenge: boolean
-  is_pre_network_tokenization_enabled: boolean
   business_country?: string
   business_label?: string
   business_sub_label?: string
-  acquirer_configs?: ProfileAcquirerResponse[]
-  is_iframe_redirection_enabled?: boolean
-  merchant_category_code?: string
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Utility types
 // ──────────────────────────────────────────────────────────────────────────────
-export type BusinessProfile = ProfileResponse
 
+export type BusinessProfile = ProfileResponse
 export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>
 export type PartialFields<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
 
-
 // ──────────────────────────────────────────────────────────────────────────────
-// Stubs para los tipos de método de pago que antes faltaban
+// Implementaciones completas para todos los tipos de método de pago
 // ──────────────────────────────────────────────────────────────────────────────
 
-export interface PayLaterDetails      { [key: string]: any }
-export interface BankRedirectDetails  { [key: string]: any }
-export interface BankTransferDetails  { [key: string]: any }
-export interface CryptoDetails        { [key: string]: any }
-export interface BankDebitDetails     { [key: string]: any }
-export interface RewardDetails        { [key: string]: any }
-export interface UpiDetails           { [key: string]: any }
-export interface VoucherDetails       { [key: string]: any }
-export interface GiftCardDetails      { [key: string]: any }
-export interface MobilePaymentDetails { [key: string]: any }
+export interface PayLaterDetails {
+  type?: 'klarna' | 'afterpay' | 'affirm' | 'zip'
+  redirect_url?: string
+  customer_acceptance?: {
+    accepted_at: string
+    acceptance_type: 'online' | 'offline'
+  }
+}
 
-export interface SamsungPayDetails          { [key: string]: any }
-export interface PaypalExperienceContext    { [key: string]: any }
-export interface ApplePayPaymentMethod      { [key: string]: any }
-export interface GooglePayPaymentMethodInfo { [key: string]: any }
-export interface GooglePayTokenizationData  { [key: string]: any }
+export interface BankRedirectDetails {
+  bank_name?: string
+  country?: string
+  redirect_url?: string
+  issuer?: string
+}
+
+export interface BankTransferDetails {
+  bank_account_number?: string
+  bank_routing_number?: string
+  bank_name?: string
+  account_holder_name?: string
+  iban?: string
+  swift_code?: string
+}
+
+export interface CryptoDetails {
+  type?: 'bitcoin' | 'ethereum' | 'litecoin'
+  network?: string
+  wallet_address?: string
+  amount_in_crypto?: number
+}
+
+export interface BankDebitDetails {
+  account_number?: string
+  routing_number?: string
+  account_type?: 'checking' | 'savings'
+  account_holder_name?: string
+}
+
+export interface RewardDetails {
+  type?: 'loyalty_points' | 'cashback' | 'gift_card'
+  points_to_redeem?: number
+  reward_account_id?: string
+}
+
+export interface UpiDetails {
+  vpa?: string // Virtual Payment Address
+  intent?: string
+  qr_code?: string
+}
+
+export interface VoucherDetails {
+  type?: 'boleto' | 'oxxo' | 'konbini'
+  voucher_code?: string
+  expiry_date?: string
+  instructions?: string
+}
+
+export interface GiftCardDetails {
+  card_number?: string
+  pin?: string
+  balance?: number
+  currency?: Currency
+}
+
+export interface MobilePaymentDetails {
+  type?: 'mpesa' | 'orange_money' | 'mtn_money'
+  phone_number?: string
+  country_code?: string
+}
+
+export interface SamsungPayDetails {
+  type: 'samsung_pay'
+  payment_data?: string
+  signature?: string
+}
+
+export interface PaypalExperienceContext {
+  brand_name?: string
+  locale?: string
+  landing_page?: 'login' | 'billing' | 'no_preference'
+  shipping_preference?: 'get_from_file' | 'no_shipping' | 'set_provided_address'
+  user_action?: 'continue' | 'pay_now'
+}
+
+export interface ApplePayPaymentMethod {
+  display_name?: string
+  network?: string
+  type?: 'debit' | 'credit' | 'prepaid'
+}
+
+export interface GooglePayPaymentMethodInfo {
+  card_network?: string
+  card_details?: string
+  assurance_details?: {
+    account_verified: boolean
+    card_holder_authenticated: boolean
+  }
+}
+
+export interface GooglePayTokenizationData {
+  type: 'PAYMENT_GATEWAY'
+  token: string
+}

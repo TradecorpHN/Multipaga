@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Cookies from 'js-cookie'
-import { hyperswitchClient } from '@/infrastructure/api/HyperswitchClient'
+import { hyperswitchClient } from '@/infrastructure/api/clients/HyperswitchClient'
 import { z } from 'zod'
 import toast from 'react-hot-toast'
 

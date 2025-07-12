@@ -1,67 +1,35 @@
-// app/(dashboard)/customers/page.tsx
 'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { 
-  Users, 
-  Plus, 
-  Search, 
-  Filter, 
-  Download,
-  RefreshCw,
-  MoreHorizontal,
-  Eye,
-  Mail,
-  Phone,
-  Calendar,
-  CreditCard,
-  ShoppingBag,
-  TrendingUp,
-  UserCheck,
-  UserX,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  Edit,
-  Ban
+import {
+  Users, Plus, Search, Download, RefreshCw, MoreHorizontal, Eye, Mail, Phone, Calendar,
+  CreditCard, ShoppingBag, TrendingUp, UserCheck, UserX, ChevronLeft, ChevronRight, Copy, Edit, Ban
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+
+// UI components – paths explícitos
+import { Button } from '@/presentation/components/ui/Button'
+import { Input } from '@/presentation/components/ui/Input'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Skeleton } from '@/presentation/components/ui/Skeleton'
+import { Avatar, AvatarFallback, AvatarImage } from '@/presentation/components/ui/Avatar'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/presentation/components/ui/DropdownMenu'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
-import { trpc } from '@/utils/trpc'
-import { formatCurrency, formatDate } from '@/lib/utils'
-import { useToast } from '@/components/ui/use-toast'
-import { useDebounce } from '@/hooks/use-debounce'
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/presentation/components/ui/Table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/presentation/components/ui/Tabs'
+import { Checkbox } from '@/presentation/components/ui/Checkbox'
+import { Label } from '@/presentation/components/ui/Label'
+import { useToast } from '@/presentation/components/ui/use-toast'
+
+// Utilities – paths explícitos
+import { formatCurrency, formatDate } from '@/presentation/components/ui/formatters'
+import { trpc } from '@/presentation/utils/trpc'
+import { useDebounce } from '@/presentation/hooks/useDebounce'
 
 interface CustomerFilters {
   email?: string
@@ -72,24 +40,29 @@ interface CustomerFilters {
   has_live_payment?: boolean
 }
 
+// Si formatCurrency espera CurrencyFormatOptions, crea el objeto:
+const USD_FORMAT: Intl.NumberFormatOptions = { style: 'currency', currency: 'USD' }
+
 export default function CustomersPage() {
   const router = useRouter()
-  const { toast } = useToast()
+  // Si tu hook useToast retorna { toast }, usa destructuring, si no, solo haz: const toast = useToast()
+const toast = useToast() 
   
+
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<CustomerFilters>({})
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [activeTab, setActiveTab] = useState('all')
-  
+
   const debouncedSearch = useDebounce(searchQuery, 300)
 
   // Build query parameters
   const queryParams = {
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
-    ...(debouncedSearch && { 
+    ...(debouncedSearch && {
       email: debouncedSearch.includes('@') ? debouncedSearch : undefined,
       name: !debouncedSearch.includes('@') ? debouncedSearch : undefined,
     }),
@@ -105,25 +78,32 @@ export default function CustomersPage() {
   // Delete customer mutation
   const deleteMutation = trpc.customers.delete.useMutation({
     onSuccess: () => {
-      toast({
-        title: 'Customer Deleted',
-        description: 'The customer has been successfully deleted.',
-      })
+ toast({
+  message: 'Customer Deleted: The customer has been successfully deleted.',
+  type: 'success',
+})
       refetch()
     },
-    onError: (error) => {
-      toast({
-        title: 'Delete Failed',
-        description: error.message,
-        variant: 'destructive',
-      })
+    onError: (error: any) => {
+toast({
+  message: `Delete Failed: ${error.message}`,
+  type: 'error',
+})
     },
   })
 
   // Export customers mutation
-  const exportMutation = trpc.customers.export.useMutation({
-    onSuccess: (data) => {
-      const blob = new Blob([data.content], { type: 'text/csv' })
+// Export customers query (SIN onSuccess/onError)
+const exportQuery = trpc.customers.export.useQuery(
+  { ...queryParams, format: 'csv' },
+  { enabled: false }
+)
+
+const handleExport = async () => {
+  try {
+    const { data } = await exportQuery.refetch()
+    if (data && data.format === 'csv') {
+      const blob = new Blob([data.data], { type: 'text/csv' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -132,53 +112,58 @@ export default function CustomersPage() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      
       toast({
-        title: 'Export Successful',
-        description: 'Your customers have been exported.',
+        message: 'Export Successful. Your customers have been exported.',
+        type: 'success',
       })
-    },
-    onError: (error) => {
+    } else {
       toast({
-        title: 'Export Failed',
-        description: error.message,
-        variant: 'destructive',
+        message: 'No data to export.',
+        type: 'info',
       })
-    },
-  })
-
-  const handleExport = () => {
-    exportMutation.mutate({
-      filters: queryParams,
-      format: 'csv',
+    }
+  } catch (error: any) {
+    toast({
+      message: `Export Failed: ${error.message}`,
+      type: 'error',
     })
   }
+}
+
 
   const handleDeleteCustomer = (customerId: string) => {
     if (confirm('Are you sure you want to delete this customer? This action cannot be undone.')) {
-      deleteMutation.mutate({ customer_id: customerId })
+      deleteMutation.mutate({ customerId })
+
     }
   }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-    toast({
-      title: 'Copied to clipboard',
-      description: 'The information has been copied to your clipboard.',
-    })
+toast({
+  message: 'Copied to clipboard. The information has been copied.',
+  type: 'info',
+})
   }
 
   const getInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name.split(' ').map(n => n[0]).join('').toUpperCase()
-    }
-    if (email) {
-      return email.substring(0, 2).toUpperCase()
-    }
+    if (name) return name.split(' ').map((n: string) => n[0]).join('').toUpperCase()
+    if (email) return email.substring(0, 2).toUpperCase()
     return 'NA'
   }
 
-  const filteredCustomers = customers?.data.filter(customer => {
+  // Typing para evitar any
+  type CustomerType = {
+    customer_id: string
+    name?: string
+    email?: string
+    phone?: string
+    created_at: string
+    payments_count: number
+    total_spent: number
+  }
+
+  const filteredCustomers = customers?.data.filter((customer: CustomerType) => {
     if (activeTab === 'active') return customer.payments_count > 0
     if (activeTab === 'new') {
       const createdDate = new Date(customer.created_at)
@@ -187,7 +172,7 @@ export default function CustomersPage() {
       return createdDate > thirtyDaysAgo
     }
     return true
-  })
+  }) || []
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
@@ -224,7 +209,6 @@ export default function CustomersPage() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
@@ -237,7 +221,6 @@ export default function CustomersPage() {
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Avg. Customer Value</CardTitle>
@@ -245,14 +228,13 @@ export default function CustomersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(stats?.average_customer_value || 0, 'USD')}
+              {formatCurrency(stats?.average_customer_value || 0, USD_FORMAT)}
             </div>
             <p className="text-xs text-muted-foreground">
               Lifetime value
             </p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Churn Rate</CardTitle>
@@ -286,7 +268,7 @@ export default function CustomersPage() {
                     <Input
                       placeholder="Search by name, email, or phone..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                       className="pl-9"
                     />
                   </div>
@@ -326,10 +308,10 @@ export default function CustomersPage() {
                     <TableRow>
                       <TableHead className="w-12">
                         <Checkbox
-                          checked={selectedCustomers.length === filteredCustomers?.length && filteredCustomers?.length > 0}
-                          onCheckedChange={(checked) => {
+                          checked={selectedCustomers.length === filteredCustomers.length && filteredCustomers.length > 0}
+                          onCheckedChange={(checked: boolean | "indeterminate") => {
                             if (checked) {
-                              setSelectedCustomers(filteredCustomers?.map(c => c.customer_id) || [])
+                              setSelectedCustomers(filteredCustomers.map((c: CustomerType) => c.customer_id) || [])
                             } else {
                               setSelectedCustomers([])
                             }
@@ -354,23 +336,23 @@ export default function CustomersPage() {
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : filteredCustomers?.length === 0 ? (
+                    ) : filteredCustomers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-muted-foreground">No customers found</p>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredCustomers?.map((customer) => (
+                      filteredCustomers.map((customer: CustomerType) => (
                         <TableRow key={customer.customer_id}>
                           <TableCell>
                             <Checkbox
                               checked={selectedCustomers.includes(customer.customer_id)}
-                              onCheckedChange={(checked) => {
+                              onCheckedChange={(checked: boolean | "indeterminate") => {
                                 if (checked) {
                                   setSelectedCustomers([...selectedCustomers, customer.customer_id])
                                 } else {
-                                  setSelectedCustomers(selectedCustomers.filter(id => id !== customer.customer_id))
+                                  setSelectedCustomers(selectedCustomers.filter((id) => id !== customer.customer_id))
                                 }
                               }}
                             />
@@ -406,7 +388,7 @@ export default function CustomersPage() {
                               {customer.email && (
                                 <div className="flex items-center gap-1 text-sm">
                                   <Mail className="h-3 w-3 text-muted-foreground" />
-                                  <a 
+                                  <a
                                     href={`mailto:${customer.email}`}
                                     className="hover:underline"
                                   >
@@ -417,7 +399,7 @@ export default function CustomersPage() {
                               {customer.phone && (
                                 <div className="flex items-center gap-1 text-sm">
                                   <Phone className="h-3 w-3 text-muted-foreground" />
-                                  <a 
+                                  <a
                                     href={`tel:${customer.phone}`}
                                     className="hover:underline"
                                   >
@@ -441,7 +423,7 @@ export default function CustomersPage() {
                           </TableCell>
                           <TableCell>
                             <div className="font-medium">
-                              {formatCurrency(customer.total_spent || 0, 'USD')}
+                              {formatCurrency(customer.total_spent || 0, USD_FORMAT)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -501,7 +483,7 @@ export default function CustomersPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -515,7 +497,7 @@ export default function CustomersPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(prev => prev + 1)}
+                  onClick={() => setCurrentPage((prev) => prev + 1)}
                   disabled={currentPage * pageSize >= (customers?.total_count || 0)}
                 >
                   Next

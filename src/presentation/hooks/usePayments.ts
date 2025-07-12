@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { hyperswitchClient, HyperswitchError } from '@/infrastructure/api/HyperswitchClient'
+import { hyperswitchClient, HyperswitchError } from '@/infrastructure/api/clients/HyperswitchClient'
 import { 
   Payment, 
   PaymentCreateRequest, 

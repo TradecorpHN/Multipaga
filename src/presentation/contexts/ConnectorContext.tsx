@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { hyperswitchClient } from '@/infrastructure/api/HyperswitchClient'
+import { hyperswitchClient } from '@/infrastructure/api/clients/HyperswitchClient'
 import { ConnectorAccount, ConnectorAccountSchema } from '@/domain/entities/Connector'
 import { useAuth } from './AuthContext'
 import { z } from 'zod'

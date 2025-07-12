@@ -1,7 +1,7 @@
 // src/infrastructure/api/HyperswitchClient.ts
 
-import { env } from '../../presentation/lib/env-config'
-import { getAuthHeaders } from '../../lib/auth'
+import { env } from '../../../presentation/lib/env-config'
+import { getAuthHeaders } from '../../../lib/auth'
 
 /**
  * Error específico para errores de Hyperswitch API.
@@ -68,12 +68,15 @@ export class HyperswitchClient {
   private timeout: number
   private merchantId: string | null = null
   private profileId: string | null = null
+  private apiKey: string
 
-constructor() {
-  this.baseUrl = env.HYPERSWITCH_BASE_URL
-  const timeoutEnv = process.env.HYPERSWITCH_TIMEOUT
-  this.timeout = timeoutEnv ? Number(timeoutEnv) : 30000
+
+constructor(options?: { baseURL?: string; apiKey?: string; timeout?: number }) {
+  this.baseUrl = options?.baseURL ?? env.HYPERSWITCH_BASE_URL
+  this.timeout = options?.timeout ?? 30000
+  this.apiKey = options?.apiKey ?? env.HYPERSWITCH_API_KEY // si quieres guardar el apiKey
 }
+
 
 
   /** Define el contexto de autenticación (merchant y profile). */

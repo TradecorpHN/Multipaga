@@ -1,4 +1,3 @@
-// app/(dashboard)/mandates/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -24,13 +23,13 @@ import {
   Ban,
   FileText
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Progress } from '@/components/ui/progress'
+import { Button } from '@/presentation/components/ui/Button'
+import { Input } from '@/presentation/components/ui/Input'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Skeleton } from '@/presentation/components/ui/Skeleton'
+import { Alert, AlertDescription, AlertTitle } from '@/presentation/components/ui/Alert'
+import { Progress } from '@/presentation/components/ui/Progress'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,14 +37,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from '@/presentation/components/ui/DropdownMenu'
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from '@/presentation/components/ui/Select'
 import {
   Table,
   TableBody,
@@ -53,18 +52,17 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar as CalendarComponent } from '@/components/ui/calendar'
+} from '@/presentation/components/ui/Table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/presentation/components/ui/Tabs'
+import { Label } from '@/presentation/components/ui/Label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/presentation/components/ui/Popover'
+import { Calendar as CalendarComponent } from '@/presentation/components/ui/Calendar'
 import { format } from 'date-fns'
-import { trpc } from '@/utils/trpc'
-import { formatDate, cn } from '@/lib/utils'
-import { useToast } from '@/components/ui/use-toast'
-import { useDebounce } from '@/hooks/use-debounce'
+import { trpc } from '@/presentation/utils/trpc'
+import { cn } from '@/presentation/lib/utils'
+import { useToast } from '@/presentation/components/ui/use-toast'
+import { useDebounce } from '@/presentation/hooks/useDebounce'
 
-// Mandate status configurations
 const STATUS_CONFIG = {
   active: { label: 'Active', variant: 'success' as const, icon: CheckCircle },
   inactive: { label: 'Inactive', variant: 'secondary' as const, icon: Clock },
@@ -73,19 +71,11 @@ const STATUS_CONFIG = {
   expired: { label: 'Expired', variant: 'secondary' as const, icon: Clock },
 }
 
-// Mandate type configurations
 const MANDATE_TYPES = {
-  single_use: { 
-    label: 'Single Use', 
-    description: 'Can be used for one payment only'
-  },
-  multi_use: { 
-    label: 'Multi Use', 
-    description: 'Can be used for multiple payments'
-  },
+  single_use: { label: 'Single Use', description: 'Can be used for one payment only' },
+  multi_use: { label: 'Multi Use', description: 'Can be used for multiple payments' },
 }
 
-// Payment method types for mandates
 const PAYMENT_METHOD_TYPES = {
   card: { label: 'Card', icon: CreditCard },
   sepa_debit: { label: 'SEPA Debit', icon: FileText },
@@ -102,6 +92,21 @@ interface MandateFilters {
   created_before?: Date
 }
 
+interface Mandate {
+  mandate_id: string
+  mandate_type: keyof typeof MANDATE_TYPES | string
+  payment_method_type: keyof typeof PAYMENT_METHOD_TYPES | string
+  mandate_status: keyof typeof STATUS_CONFIG | string
+  customer_id: string
+  customer?: {
+    name?: string
+    email?: string
+  }
+  usage_count: number
+  created_at: string | number | Date
+  payment_id?: string
+}
+
 export default function MandatesPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -115,7 +120,6 @@ export default function MandatesPage() {
   
   const debouncedSearch = useDebounce(searchQuery, 300)
 
-  // Build query parameters
   const queryParams = {
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
@@ -134,13 +138,10 @@ export default function MandatesPage() {
     }),
   }
 
-  // Fetch mandates
-  const { data: mandates, isLoading, refetch } = trpc.mandates.list.useQuery(queryParams)
+ const { data: mandates, isLoading, refetch } = trpc.mandates.list.useQuery(queryParams)
+const { data: stats } = trpc.mandates.stats.useQuery()
 
-  // Fetch mandate statistics
-  const { data: stats } = trpc.mandates.stats.useQuery({})
 
-  // Revoke mandate mutation
   const revokeMutation = trpc.mandates.revoke.useMutation({
     onSuccess: () => {
       toast({
@@ -149,7 +150,7 @@ export default function MandatesPage() {
       })
       refetch()
     },
-    onError: (error) => {
+    onError: (error: { message: string }) => {
       toast({
         title: 'Revoke Failed',
         description: error.message,
@@ -165,7 +166,7 @@ export default function MandatesPage() {
   }
 
   const handleExport = () => {
-    // TODO: Implement export functionality
+    // Implement export functionality real aquí si lo necesitas
     console.log('Exporting mandates...')
   }
 
@@ -180,7 +181,6 @@ export default function MandatesPage() {
   const getStatusBadge = (status: string) => {
     const config = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG]
     if (!config) return null
-    
     const Icon = config.icon
     return (
       <Badge variant={config.variant} className="flex items-center gap-1">
@@ -190,12 +190,22 @@ export default function MandatesPage() {
     )
   }
 
-  const filteredMandates = mandates?.data.filter(mandate => {
+  const formatMandateDate = (date: string | number | Date): string => {
+    try {
+      if (!date) return '-'
+      const d = typeof date === 'number' ? new Date(date) : new Date(date)
+      return format(d, 'MMM d, yyyy')
+    } catch {
+      return '-'
+    }
+  }
+
+  const filteredMandates: Mandate[] = (mandates?.data as Mandate[])?.filter((mandate: Mandate) => {
     if (activeTab === 'active') return mandate.mandate_status === 'active'
     if (activeTab === 'pending') return mandate.mandate_status === 'pending'
     if (activeTab === 'revoked') return ['revoked', 'expired'].includes(mandate.mandate_status)
     return true
-  })
+  }) ?? []
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
@@ -313,7 +323,7 @@ export default function MandatesPage() {
               <Input
                 placeholder="Search by mandate ID, customer..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
@@ -360,7 +370,7 @@ export default function MandatesPage() {
                     <Label>Status</Label>
                     <Select
                       value={filters.status || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
                           status: value === 'all' ? undefined : value
@@ -385,7 +395,7 @@ export default function MandatesPage() {
                     <Label>Type</Label>
                     <Select
                       value={filters.mandate_type || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
                           mandate_type: value === 'all' ? undefined : value
@@ -410,7 +420,7 @@ export default function MandatesPage() {
                     <Label>Payment Method</Label>
                     <Select
                       value={filters.payment_method_type || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
                           payment_method_type: value === 'all' ? undefined : value
@@ -451,7 +461,7 @@ export default function MandatesPage() {
                             from: filters.created_after,
                             to: filters.created_before,
                           }}
-                          onSelect={(range: any) => {
+                          onSelect={(range: { from?: Date; to?: Date } | undefined) => {
                             setFilters(prev => ({
                               ...prev,
                               created_after: range?.from,
@@ -503,7 +513,7 @@ export default function MandatesPage() {
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : filteredMandates?.length === 0 ? (
+                    ) : filteredMandates.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-muted-foreground">No mandates found</p>
@@ -518,7 +528,7 @@ export default function MandatesPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredMandates?.map((mandate) => {
+                      filteredMandates.map((mandate: Mandate) => {
                         const typeConfig = MANDATE_TYPES[mandate.mandate_type as keyof typeof MANDATE_TYPES]
                         const methodConfig = PAYMENT_METHOD_TYPES[mandate.payment_method_type as keyof typeof PAYMENT_METHOD_TYPES]
                         const MethodIcon = methodConfig?.icon || CreditCard
@@ -576,7 +586,7 @@ export default function MandatesPage() {
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="text-sm">{formatDate(mandate.created_at)}</p>
+                                <p className="text-sm">{formatMandateDate(mandate.created_at)}</p>
                                 <p className="text-xs text-muted-foreground">
                                   {format(new Date(mandate.created_at), 'HH:mm:ss')}
                                 </p>

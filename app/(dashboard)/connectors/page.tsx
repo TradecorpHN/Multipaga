@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useConnectors } from '@/presentation/contexts/ConnectorContext'
 import { ConnectorEntity, ConnectorType } from '@/domain/entities/Connector'
@@ -26,7 +26,16 @@ import Image from 'next/image'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 
-// Connector type icons
+// ============= Utilidad para logo path (robusta, con fallback) ==============
+function getLogoPath(connectorName: string): string {
+  if (!connectorName) return '/resources/connectors/PLACEHOLDER.svg'
+  const normalized = connectorName
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+  return `/resources/connectors/${normalized}.svg`
+}
+
+// ============= Icons por tipo ==================
 const typeIcons: Record<ConnectorType, any> = {
   [ConnectorType.PAYMENT_PROCESSOR]: CreditCard,
   [ConnectorType.PAYMENT_VAS]: Zap,
@@ -42,21 +51,21 @@ export default function ConnectorsPage() {
   const [selectedType, setSelectedType] = useState<ConnectorType | 'all'>('all')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Filter connectors
+  // ===== Filtrado =====
   const filteredConnectors = connectors.filter(connector => {
-    const matchesSearch = searchTerm === '' || 
+    const matchesSearch = searchTerm === '' ||
       connector.connector_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       connector.connector_label?.toLowerCase().includes(searchTerm.toLowerCase())
-    
+
     const matchesType = selectedType === 'all' || connector.connector_type === selectedType
-    
+
     return matchesSearch && matchesType
   })
 
-  // Group connectors by type
+  // ===== Agrupar por tipo =====
   const groupedConnectors = ConnectorEntity.groupConnectorsByType(filteredConnectors)
 
-  // Handle refresh
+  // ===== Refresh =====
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
@@ -69,7 +78,7 @@ export default function ConnectorsPage() {
     }
   }
 
-  // Connector card component
+  // ===== Tarjeta del conector =====
   const ConnectorCard = ({ connector }: { connector: any }) => {
     const isActive = ConnectorEntity.isActive(connector)
     const TypeIcon = typeIcons[connector.connector_type as ConnectorType] || Cable
@@ -106,14 +115,14 @@ export default function ConnectorsPage() {
           <div className="flex items-start space-x-4 mb-4">
             <div className="w-16 h-16 bg-dark-bg rounded-lg p-2 flex items-center justify-center">
               <Image
-                src={ConnectorEntity.getLogoPath(connector.connector_name)}
+                src={getLogoPath(connector.connector_name)}
                 alt={connector.connector_name}
                 width={48}
                 height={48}
                 className="object-contain"
                 onError={(e) => {
-                  // Fallback to placeholder if logo not found
-                  e.currentTarget.src = '/resources/connectors/PLACEHOLDER.svg'
+                  // fallback logo
+                  (e.currentTarget as HTMLImageElement).src = '/resources/connectors/PLACEHOLDER.svg'
                 }}
               />
             </div>
@@ -321,7 +330,7 @@ export default function ConnectorsPage() {
                   ? 'Try adjusting your filters'
                   : 'Configure your first payment connector to start processing payments'}
               </p>
-              <Button variant="primary">
+              <Button variant="default">
                 Add Connector
               </Button>
             </div>

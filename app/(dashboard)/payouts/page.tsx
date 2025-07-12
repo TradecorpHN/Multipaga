@@ -1,73 +1,42 @@
-// app/(dashboard)/payouts/page.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, ChangeEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { 
-  Send, 
-  Plus, 
-  Search, 
-  Filter, 
-  Download,
-  RefreshCw,
-  MoreHorizontal,
-  Eye,
-  Copy,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertCircle,
-  ArrowUpRight,
-  Building,
-  CreditCard,
-  DollarSign,
-  TrendingUp,
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink
+import {
+  Send, Plus, Search, Filter, Download, RefreshCw, MoreHorizontal, Eye,
+  Copy, CheckCircle, XCircle, Clock, AlertCircle, Building, CreditCard,
+  DollarSign, Calendar, ChevronLeft, ChevronRight, ExternalLink
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Progress } from '@/components/ui/progress'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Calendar as CalendarComponent } from '@/components/ui/calendar'
-import { format } from 'date-fns'
-import { trpc } from '@/utils/trpc'
-import { formatCurrency, formatDate, cn } from '@/lib/utils'
-import { useToast } from '@/components/ui/use-toast'
-import { useDebounce } from '@/hooks/use-debounce'
 
-// Payout status configurations
+import { Button } from '@/presentation/components/ui/Button'
+import { Input } from '@/presentation/components/ui/Input'
+import {
+  Card, CardContent, CardFooter, CardHeader, CardTitle
+} from '@/presentation/components/ui/Card'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Skeleton } from '@/presentation/components/ui/Skeleton'
+import { Alert, AlertDescription, AlertTitle } from '@/presentation/components/ui/Alert'
+import { Progress } from '@/presentation/components/ui/Progress'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger
+} from '@/presentation/components/ui/DropdownMenu'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from '@/presentation/components/ui/Select'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from '@/presentation/components/ui/Table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/presentation/components/ui/Tabs'
+import { Label } from '@/presentation/components/ui/Label'
+import { Popover, PopoverContent, PopoverTrigger } from '@/presentation/components/ui/Popover'
+import { Calendar as CalendarComponent, DateRange } from '@/presentation/components/ui/Calendar'
+import { format } from 'date-fns'
+import { trpc } from '@/presentation/utils/trpc'
+import { formatCurrency, formatDate } from '@/presentation/lib/utils/formatters'
+import { useToast } from '@/presentation/components/ui/use-toast'
+import { useDebounce } from '@/presentation/hooks/use-debounce'
+
 const STATUS_CONFIG = {
   success: { label: 'Success', variant: 'success' as const, icon: CheckCircle },
   failed: { label: 'Failed', variant: 'destructive' as const, icon: XCircle },
@@ -81,7 +50,6 @@ const STATUS_CONFIG = {
   requires_vendor_account_creation: { label: 'Requires Vendor Setup', variant: 'outline' as const, icon: Building },
 }
 
-// Payout type configurations
 const PAYOUT_TYPES = {
   bank: { label: 'Bank Transfer', icon: Building },
   card: { label: 'Card', icon: CreditCard },
@@ -99,60 +67,60 @@ interface PayoutFilters {
   created_before?: Date
 }
 
+interface Payout {
+  payout_id: string
+  amount: number
+  currency: string
+  payout_type: string
+  status: string
+  created_at: string
+  description?: string
+  connector?: string
+  connector_payout_id?: string
+  customer?: { email?: string }
+  customer_id?: string
+}
+
 export default function PayoutsPage() {
   const router = useRouter()
   const { toast } = useToast()
-  
+
   const [selectedPayouts, setSelectedPayouts] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<PayoutFilters>({})
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
+  const [pageSize] = useState(20)
   const [activeTab, setActiveTab] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
-  
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
+
   const debouncedSearch = useDebounce(searchQuery, 300)
 
-  // Build query parameters
-  const queryParams = {
+  // ⬇️ Usa trpc.payout.list y cambia a trpc.payouts.list si tu router es plural
+  const { data: payouts, isLoading, refetch } = trpc.payout.list.useQuery({
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
-    ...(debouncedSearch && { 
-      payout_id: debouncedSearch,
-      customer_id: debouncedSearch,
-    }),
-    ...(filters.payout_status && filters.payout_status.length > 0 && { 
-      payout_status: filters.payout_status 
-    }),
-    ...(filters.payout_type && filters.payout_type.length > 0 && { 
-      payout_type: filters.payout_type 
-    }),
-    ...(filters.currency && filters.currency.length > 0 && { 
-      currency: filters.currency 
-    }),
+    ...(debouncedSearch && { payout_id: debouncedSearch, customer_id: debouncedSearch }),
+    ...(filters.payout_status && filters.payout_status.length > 0 && { payout_status: filters.payout_status }),
+    ...(filters.payout_type && filters.payout_type.length > 0 && { payout_type: filters.payout_type }),
+    ...(filters.currency && filters.currency.length > 0 && { currency: filters.currency }),
     ...(filters.amount_gte && { amount: { gte: filters.amount_gte * 100 } }),
     ...(filters.amount_lte && { amount: { lte: filters.amount_lte * 100 } }),
     ...(filters.created_after && filters.created_before && {
       created: {
         gte: filters.created_after.toISOString(),
         lte: filters.created_before.toISOString(),
-      }
+      },
     }),
-  }
-
-  // Fetch payouts
-  const { data: payouts, isLoading, refetch } = trpc.payouts.list.useQuery(queryParams)
-
-  // Fetch payout statistics
-  const { data: stats } = trpc.payouts.stats.useQuery({
+  })
+  const { data: stats } = trpc.payout.stats.useQuery({
     time_range: {
       start_time: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
       end_time: new Date().toISOString(),
-    }
+    },
   })
 
-  // Cancel payout mutation
-  const cancelMutation = trpc.payouts.cancel.useMutation({
+  const cancelMutation = trpc.payout.cancel.useMutation({
     onSuccess: () => {
       toast({
         title: 'Payout Cancelled',
@@ -160,7 +128,7 @@ export default function PayoutsPage() {
       })
       refetch()
     },
-    onError: (error) => {
+    onError: (error: { message: string }) => {
       toast({
         title: 'Cancellation Failed',
         description: error.message,
@@ -169,8 +137,7 @@ export default function PayoutsPage() {
     },
   })
 
-  // Fulfill payout mutation
-  const fulfillMutation = trpc.payouts.fulfill.useMutation({
+  const fulfillMutation = trpc.payout.fulfill.useMutation({
     onSuccess: () => {
       toast({
         title: 'Payout Fulfilled',
@@ -178,7 +145,7 @@ export default function PayoutsPage() {
       })
       refetch()
     },
-    onError: (error) => {
+    onError: (error: { message: string }) => {
       toast({
         title: 'Fulfillment Failed',
         description: error.message,
@@ -189,7 +156,7 @@ export default function PayoutsPage() {
 
   const handleCancelPayout = (payoutId: string) => {
     if (confirm('Are you sure you want to cancel this payout? This action may not be reversible.')) {
-      cancelMutation.mutate({ 
+      cancelMutation.mutate({
         payout_id: payoutId,
         cancellation_reason: 'requested_by_customer',
       })
@@ -201,8 +168,38 @@ export default function PayoutsPage() {
   }
 
   const handleExport = () => {
-    // TODO: Implement export functionality
-    console.log('Exporting payouts...')
+    if (!payouts?.data) {
+      toast({ title: 'No data to export.' })
+      return
+    }
+    const headers = [
+      'Payout ID', 'Amount', 'Currency', 'Type', 'Status', 'Created', 'Customer'
+    ]
+    const rows = payouts.data.map((payout: Payout) => [
+      payout.payout_id,
+      formatCurrency(payout.amount, payout.currency),
+      payout.currency,
+      payout.payout_type,
+      payout.status,
+      formatDate(payout.created_at),
+      payout.customer?.email || payout.customer_id || '',
+    ])
+    const csv = [
+      headers.join(','),
+      ...rows.map((row: string[]) =>
+        row.map(field => `"${(field ?? '').toString().replace(/"/g, '""')}"`).join(',')
+      ),
+    ].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `payouts-export-${format(new Date(), 'yyyy-MM-dd')}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    toast({ title: 'Export Successful', description: 'Your payouts have been exported.' })
   }
 
   const copyToClipboard = (text: string) => {
@@ -216,7 +213,6 @@ export default function PayoutsPage() {
   const getStatusBadge = (status: string) => {
     const config = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG]
     if (!config) return null
-    
     const Icon = config.icon
     return (
       <Badge variant={config.variant} className="flex items-center gap-1">
@@ -226,14 +222,12 @@ export default function PayoutsPage() {
     )
   }
 
-  const filteredPayouts = payouts?.data.filter(payout => {
-    if (activeTab === 'pending') {
-      return ['initiated', 'pending', 'requires_fulfillment'].includes(payout.status)
-    }
+  const filteredPayouts = payouts?.data?.filter((payout: Payout) => {
+    if (activeTab === 'pending') return ['initiated', 'pending', 'requires_fulfillment'].includes(payout.status)
     if (activeTab === 'completed') return payout.status === 'success'
     if (activeTab === 'failed') return ['failed', 'cancelled', 'expired'].includes(payout.status)
     return true
-  })
+  }) || []
 
   return (
     <div className="flex-1 space-y-4 p-8 pt-6">
@@ -256,7 +250,6 @@ export default function PayoutsPage() {
         </div>
       </div>
 
-      {/* Check availability */}
       {stats && !stats.is_available && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
@@ -276,9 +269,7 @@ export default function PayoutsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats?.total_payouts || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              This month
-            </p>
+            <p className="text-xs text-muted-foreground">This month</p>
           </CardContent>
         </Card>
 
@@ -330,7 +321,6 @@ export default function PayoutsPage() {
         </Card>
       </div>
 
-      {/* Tabs and Filters */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex items-center justify-between">
           <TabsList>
@@ -353,7 +343,7 @@ export default function PayoutsPage() {
               <Input
                 placeholder="Search by payout ID, customer..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
@@ -400,10 +390,10 @@ export default function PayoutsPage() {
                     <Label>Status</Label>
                     <Select
                       value={filters.payout_status?.[0] || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
-                          payout_status: value === 'all' ? undefined : [value]
+                          payout_status: value === 'all' ? undefined : [value],
                         }))
                       }
                     >
@@ -420,15 +410,14 @@ export default function PayoutsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Type</Label>
                     <Select
                       value={filters.payout_type?.[0] || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
-                          payout_type: value === 'all' ? undefined : [value]
+                          payout_type: value === 'all' ? undefined : [value],
                         }))
                       }
                     >
@@ -445,15 +434,14 @@ export default function PayoutsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Currency</Label>
                     <Select
                       value={filters.currency?.[0] || 'all'}
-                      onValueChange={(value) => 
+                      onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
-                          currency: value === 'all' ? undefined : [value]
+                          currency: value === 'all' ? undefined : [value],
                         }))
                       }
                     >
@@ -469,28 +457,23 @@ export default function PayoutsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Date Range</Label>
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button variant="outline" className="w-full justify-start text-left font-normal">
                           <Calendar className="mr-2 h-4 w-4" />
-                          {filters.created_after && filters.created_before ? (
-                            `${format(filters.created_after, 'MMM d')} - ${format(filters.created_before, 'MMM d')}`
-                          ) : (
-                            'Select dates'
-                          )}
+                          {filters.created_after && filters.created_before
+                            ? `${format(filters.created_after, 'MMM d')} - ${format(filters.created_before, 'MMM d')}`
+                            : 'Select dates'}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
                         <CalendarComponent
                           mode="range"
-                          selected={{
-                            from: filters.created_after,
-                            to: filters.created_before,
-                          }}
-                          onSelect={(range: any) => {
+                          selected={dateRange}
+                          onSelect={(range?: DateRange) => {
+                            setDateRange(range)
                             setFilters(prev => ({
                               ...prev,
                               created_after: range?.from,
@@ -503,11 +486,13 @@ export default function PayoutsPage() {
                     </Popover>
                   </div>
                 </div>
-
                 <div className="flex justify-end mt-4 gap-2">
                   <Button
                     variant="outline"
-                    onClick={() => setFilters({})}
+                    onClick={() => {
+                      setFilters({})
+                      setDateRange(undefined)
+                    }}
                   >
                     Clear Filters
                   </Button>
@@ -526,10 +511,13 @@ export default function PayoutsPage() {
                       <TableHead className="w-12">
                         <input
                           type="checkbox"
-                          checked={selectedPayouts.length === filteredPayouts?.length && filteredPayouts?.length > 0}
-                          onChange={(e) => {
+                          checked={
+                            selectedPayouts.length === filteredPayouts.length &&
+                            filteredPayouts.length > 0
+                          }
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
                             if (e.target.checked) {
-                              setSelectedPayouts(filteredPayouts?.map(p => p.payout_id) || [])
+                              setSelectedPayouts(filteredPayouts.map((p: Payout) => p.payout_id) || [])
                             } else {
                               setSelectedPayouts([])
                             }
@@ -555,13 +543,13 @@ export default function PayoutsPage() {
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : filteredPayouts?.length === 0 ? (
+                    ) : filteredPayouts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-muted-foreground">No payouts found</p>
                           {activeTab === 'all' && (
-                            <Button 
-                              className="mt-4" 
+                            <Button
+                              className="mt-4"
                               onClick={() => router.push('/payouts/create')}
                             >
                               Create Your First Payout
@@ -570,17 +558,16 @@ export default function PayoutsPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredPayouts?.map((payout) => {
+                      filteredPayouts.map((payout: Payout) => {
                         const typeConfig = PAYOUT_TYPES[payout.payout_type as keyof typeof PAYOUT_TYPES]
                         const TypeIcon = typeConfig?.icon || Send
-                        
                         return (
                           <TableRow key={payout.payout_id}>
                             <TableCell>
                               <input
                                 type="checkbox"
                                 checked={selectedPayouts.includes(payout.payout_id)}
-                                onChange={(e) => {
+                                onChange={(e: ChangeEvent<HTMLInputElement>) => {
                                   if (e.target.checked) {
                                     setSelectedPayouts([...selectedPayouts, payout.payout_id])
                                   } else {
@@ -685,7 +672,7 @@ export default function PayoutsPage() {
             </CardContent>
             <CardFooter className="flex items-center justify-between border-t px-6 py-4">
               <div className="text-sm text-muted-foreground">
-                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, payouts?.total_count || 0)} of {payouts?.total_count || 0} payouts
+                Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, payouts?.total_count || 0)} of {payouts?.total_count || 0} payouts
               </div>
               <div className="flex items-center gap-2">
                 <Button
