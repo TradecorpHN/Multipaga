@@ -31,7 +31,8 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
-import { hyperswitch } from '@/lib/hyperswitch'
+// Importación corregida del cliente de Hyperswitch
+import { hyperswitchClient } from '/home/kali/multipaga/src/infrastructure/api/clients/HyperswitchClient'
 import type { RefundResponse, PaymentResponse } from '@/types/hyperswitch'
 
 // Refund Status Configuration
@@ -79,16 +80,16 @@ const copyToClipboard = (text: string, label: string) => {
   toast.success(`${label} copiado al portapapeles`)
 }
 
-// Fetcher functions
+// Fetcher functions usando el cliente corregido
 const refundFetcher = async (url: string): Promise<RefundResponse> => {
   const refundId = url.split('/').pop()
   if (!refundId) throw new Error('Refund ID is required')
   
   try {
-    const response = await hyperswitch.getRefund(refundId)
-    return response as RefundResponse
+    const response = await hyperswitchClient.get<RefundResponse>(`/refunds/${refundId}`)
+    return response
   } catch (error: any) {
-    if (error.status_code === 404) {
+    if (error.status === 404) {
       throw new Error('Refund not found')
     }
     throw error
@@ -97,12 +98,25 @@ const refundFetcher = async (url: string): Promise<RefundResponse> => {
 
 const paymentFetcher = async (paymentId: string): Promise<PaymentResponse> => {
   try {
-    const response = await hyperswitch.getPayment(paymentId)
-    return response as PaymentResponse
+    const response = await hyperswitchClient.get<PaymentResponse>(`/payments/${paymentId}`)
+    return response
   } catch (error: any) {
     console.error('Error fetching payment:', error)
     throw error
   }
+}
+
+// Definir una interfaz extendida para el pago que incluya las propiedades esperadas
+interface ExtendedPaymentResponse extends PaymentResponse {
+  customer?: {
+    email?: string
+    customer_id?: string
+  }
+  refunds?: Array<{
+    refund_id: string
+    refund_amount: number
+    refund_status: string
+  }>
 }
 
 export default function RefundDetailPage() {
@@ -124,9 +138,9 @@ export default function RefundDetailPage() {
   )
 
   // Fetch associated payment data
-  const { data: payment } = useSWR<PaymentResponse>(
+  const { data: payment } = useSWR<ExtendedPaymentResponse>(
     refund?.payment_id ? `/payments/${refund.payment_id}` : null,
-    () => paymentFetcher(refund!.payment_id),
+    () => paymentFetcher(refund!.payment_id) as Promise<ExtendedPaymentResponse>,
     {
       revalidateOnFocus: false,
       shouldRetryOnError: false,
@@ -435,7 +449,7 @@ export default function RefundDetailPage() {
                     />
                     <InfoField
                       label="ID de Transacción del Conector"
-                      value={refund.connector_transaction_id}
+                      value={refund.connector_transaction_id || 'N/A'}
                     />
                     {refund.merchant_connector_id && (
                       <InfoField
@@ -518,11 +532,11 @@ export default function RefundDetailPage() {
                   />
                   <InfoField
                     label="Método de Pago"
-                    value={payment.payment_method || 'No especificado'}
+                    value={typeof payment.payment_method === 'string' ? payment.payment_method : 'No especificado'}
                   />
                   <InfoField
                     label="Cliente"
-                    value={payment.customer?.email || payment.customer_id || 'No especificado'}
+                    value={payment.customer?.email || payment.customer?.customer_id || 'No especificado'}
                   />
                   <InfoField
                     label="Fecha del Pago"
@@ -543,7 +557,7 @@ export default function RefundDetailPage() {
                         <span className="text-dark-text-secondary">Monto total reembolsado:</span>
                         <span className="font-medium">
                           {formatCurrency(
-                            payment.refunds.reduce((sum, r) => sum + r.refund_amount, 0),
+                            payment.refunds.reduce((sum: number, r: any) => sum + r.refund_amount, 0),
                             payment.currency
                           )}
                         </span>
@@ -552,7 +566,7 @@ export default function RefundDetailPage() {
                         <span className="text-dark-text-secondary">Monto restante:</span>
                         <span className="font-medium">
                           {formatCurrency(
-                            (payment.amount || 0) - payment.refunds.reduce((sum, r) => sum + r.refund_amount, 0),
+                            (payment.amount || 0) - payment.refunds.reduce((sum: number, r: any) => sum + r.refund_amount, 0),
                             payment.currency
                           )}
                         </span>

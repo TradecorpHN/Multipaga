@@ -1,0 +1,408 @@
+[
+  {
+    "name": "multipaga",
+    "version": "1.0.0",
+    "path": "/home/kali/multipaga",
+    "private": true,
+    "dependencies": {
+      "@hookform/resolvers": {
+        "from": "@hookform/resolvers",
+        "version": "3.10.0",
+        "resolved": "https://registry.npmjs.org/@hookform/resolvers/-/resolvers-3.10.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@hookform+resolvers@3.10.0_react-hook-form@7.60.0_react@18.3.1_/node_modules/@hookform/resolvers"
+      },
+      "@radix-ui/react-alert-dialog": {
+        "from": "@radix-ui/react-alert-dialog",
+        "version": "1.1.14",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-alert-dialog/-/react-alert-dialog-1.1.14.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-alert-dialog@1.1.14_@types+react-dom@18.3.7_@types+react@18.3.23__@type_66f0df9c34c45541864174e824164977/node_modules/@radix-ui/react-alert-dialog"
+      },
+      "@radix-ui/react-checkbox": {
+        "from": "@radix-ui/react-checkbox",
+        "version": "1.3.2",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-checkbox/-/react-checkbox-1.3.2.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-checkbox@1.3.2_@types+react-dom@18.3.7_@types+react@18.3.23__@types+rea_4d27bf1415e6fa99d2a5ebc4289da892/node_modules/@radix-ui/react-checkbox"
+      },
+      "@radix-ui/react-collapsible": {
+        "from": "@radix-ui/react-collapsible",
+        "version": "1.1.11",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-collapsible/-/react-collapsible-1.1.11.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-collapsible@1.1.11_@types+react-dom@18.3.7_@types+react@18.3.23__@types_09259d48fae5455ff786e186de607d41/node_modules/@radix-ui/react-collapsible"
+      },
+      "@radix-ui/react-dialog": {
+        "from": "@radix-ui/react-dialog",
+        "version": "1.1.14",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-dialog/-/react-dialog-1.1.14.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-dialog@1.1.14_@types+react-dom@18.3.7_@types+react@18.3.23__@types+reac_979338a14129bfbd4b93c15b369f3450/node_modules/@radix-ui/react-dialog"
+      },
+      "@radix-ui/react-dropdown-menu": {
+        "from": "@radix-ui/react-dropdown-menu",
+        "version": "2.1.15",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-dropdown-menu/-/react-dropdown-menu-2.1.15.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-dropdown-menu@2.1.15_@types+react-dom@18.3.7_@types+react@18.3.23__@typ_8ec93851da28661231dcc925c4c21d7f/node_modules/@radix-ui/react-dropdown-menu"
+      },
+      "@radix-ui/react-popover": {
+        "from": "@radix-ui/react-popover",
+        "version": "1.1.14",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-popover/-/react-popover-1.1.14.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-popover@1.1.14_@types+react-dom@18.3.7_@types+react@18.3.23__@types+rea_58d720829f82e8d062ec070fb7840cdf/node_modules/@radix-ui/react-popover"
+      },
+      "@radix-ui/react-progress": {
+        "from": "@radix-ui/react-progress",
+        "version": "1.1.7",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-progress/-/react-progress-1.1.7.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-progress@1.1.7_@types+react-dom@18.3.7_@types+react@18.3.23__@types+rea_953a9c17bf8fafcb57fcdd391d84f7ef/node_modules/@radix-ui/react-progress"
+      },
+      "@radix-ui/react-select": {
+        "from": "@radix-ui/react-select",
+        "version": "2.2.5",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-select/-/react-select-2.2.5.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-select@2.2.5_@types+react-dom@18.3.7_@types+react@18.3.23__@types+react_74ff1e179f6928d61bde19586f0439bf/node_modules/@radix-ui/react-select"
+      },
+      "@radix-ui/react-separator": {
+        "from": "@radix-ui/react-separator",
+        "version": "1.1.7",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-separator/-/react-separator-1.1.7.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-separator@1.1.7_@types+react-dom@18.3.7_@types+react@18.3.23__@types+re_a935beed276764a445ba167cf5230d34/node_modules/@radix-ui/react-separator"
+      },
+      "@radix-ui/react-slot": {
+        "from": "@radix-ui/react-slot",
+        "version": "1.2.3",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.2.3.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-slot@1.2.3_@types+react@18.3.23_react@18.3.1/node_modules/@radix-ui/react-slot"
+      },
+      "@radix-ui/react-tabs": {
+        "from": "@radix-ui/react-tabs",
+        "version": "1.1.12",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-tabs/-/react-tabs-1.1.12.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-tabs@1.1.12_@types+react-dom@18.3.7_@types+react@18.3.23__@types+react@_039f4c9042ddc46bc6b9dbdec180c93a/node_modules/@radix-ui/react-tabs"
+      },
+      "@radix-ui/react-tooltip": {
+        "from": "@radix-ui/react-tooltip",
+        "version": "1.2.7",
+        "resolved": "https://registry.npmjs.org/@radix-ui/react-tooltip/-/react-tooltip-1.2.7.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@radix-ui+react-tooltip@1.2.7_@types+react-dom@18.3.7_@types+react@18.3.23__@types+reac_50e390c4dabde08ed3112eb9f58da500/node_modules/@radix-ui/react-tooltip"
+      },
+      "@react-three/drei": {
+        "from": "@react-three/drei",
+        "version": "9.122.0",
+        "resolved": "https://registry.npmjs.org/@react-three/drei/-/drei-9.122.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@react-three+drei@9.122.0_@react-three+fiber@8.18.0_@types+react@18.3.23_react-dom@18.3_04284750c1cd50bd460b73d111438a20/node_modules/@react-three/drei"
+      },
+      "@react-three/fiber": {
+        "from": "@react-three/fiber",
+        "version": "8.18.0",
+        "resolved": "https://registry.npmjs.org/@react-three/fiber/-/fiber-8.18.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@react-three+fiber@8.18.0_@types+react@18.3.23_react-dom@18.3.1_react@18.3.1__react@18.3.1_three@0.160.1/node_modules/@react-three/fiber"
+      },
+      "@sentry/nextjs": {
+        "from": "@sentry/nextjs",
+        "version": "7.120.3",
+        "resolved": "https://registry.npmjs.org/@sentry/nextjs/-/nextjs-7.120.3.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@sentry+nextjs@7.120.3_next@14.1.0_@babel+core@7.28.0_react-dom@18.3.1_react@18.3.1__react@18.3.1__react@18.3.1/node_modules/@sentry/nextjs"
+      },
+      "@tanstack/react-query": {
+        "from": "@tanstack/react-query",
+        "version": "5.82.0",
+        "resolved": "https://registry.npmjs.org/@tanstack/react-query/-/react-query-5.82.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@tanstack+react-query@5.82.0_react@18.3.1/node_modules/@tanstack/react-query"
+      },
+      "@trpc/client": {
+        "from": "@trpc/client",
+        "version": "11.4.3",
+        "resolved": "https://registry.npmjs.org/@trpc/client/-/client-11.4.3.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@trpc+client@11.4.3_@trpc+server@11.4.3_typescript@5.8.3__typescript@5.8.3/node_modules/@trpc/client"
+      },
+      "@trpc/react-query": {
+        "from": "@trpc/react-query",
+        "version": "11.4.3",
+        "resolved": "https://registry.npmjs.org/@trpc/react-query/-/react-query-11.4.3.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@trpc+react-query@11.4.3_@tanstack+react-query@5.82.0_react@18.3.1__@trpc+client@11.4.3_d0498029aa59b6d3915912a9417ca2ee/node_modules/@trpc/react-query"
+      },
+      "@trpc/server": {
+        "from": "@trpc/server",
+        "version": "11.4.3",
+        "resolved": "https://registry.npmjs.org/@trpc/server/-/server-11.4.3.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@trpc+server@11.4.3_typescript@5.8.3/node_modules/@trpc/server"
+      },
+      "axios": {
+        "from": "axios",
+        "version": "1.10.0",
+        "resolved": "https://registry.npmjs.org/axios/-/axios-1.10.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/axios@1.10.0/node_modules/axios"
+      },
+      "class-variance-authority": {
+        "from": "class-variance-authority",
+        "version": "0.7.1",
+        "resolved": "https://registry.npmjs.org/class-variance-authority/-/class-variance-authority-0.7.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/class-variance-authority@0.7.1/node_modules/class-variance-authority"
+      },
+      "clsx": {
+        "from": "clsx",
+        "version": "2.1.1",
+        "resolved": "https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/clsx@2.1.1/node_modules/clsx"
+      },
+      "date-fns": {
+        "from": "date-fns",
+        "version": "3.6.0",
+        "resolved": "https://registry.npmjs.org/date-fns/-/date-fns-3.6.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/date-fns@3.6.0/node_modules/date-fns"
+      },
+      "framer-motion": {
+        "from": "framer-motion",
+        "version": "10.18.0",
+        "resolved": "https://registry.npmjs.org/framer-motion/-/framer-motion-10.18.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/framer-motion@10.18.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/framer-motion"
+      },
+      "immer": {
+        "from": "immer",
+        "version": "10.1.1",
+        "resolved": "https://registry.npmjs.org/immer/-/immer-10.1.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/immer@10.1.1/node_modules/immer"
+      },
+      "js-cookie": {
+        "from": "js-cookie",
+        "version": "3.0.5",
+        "resolved": "https://registry.npmjs.org/js-cookie/-/js-cookie-3.0.5.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/js-cookie@3.0.5/node_modules/js-cookie"
+      },
+      "json2csv": {
+        "from": "json2csv",
+        "version": "6.0.0-alpha.2",
+        "resolved": "https://registry.npmjs.org/json2csv/-/json2csv-6.0.0-alpha.2.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/json2csv@6.0.0-alpha.2/node_modules/json2csv"
+      },
+      "jsonwebtoken": {
+        "from": "jsonwebtoken",
+        "version": "9.0.2",
+        "resolved": "https://registry.npmjs.org/jsonwebtoken/-/jsonwebtoken-9.0.2.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/jsonwebtoken@9.0.2/node_modules/jsonwebtoken"
+      },
+      "lucide-react": {
+        "from": "lucide-react",
+        "version": "0.525.0",
+        "resolved": "https://registry.npmjs.org/lucide-react/-/lucide-react-0.525.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/lucide-react@0.525.0_react@18.3.1/node_modules/lucide-react"
+      },
+      "next": {
+        "from": "next",
+        "version": "14.1.0",
+        "resolved": "https://registry.npmjs.org/next/-/next-14.1.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/next@14.1.0_@babel+core@7.28.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/next"
+      },
+      "rate-limiter-flexible": {
+        "from": "rate-limiter-flexible",
+        "version": "4.0.1",
+        "resolved": "https://registry.npmjs.org/rate-limiter-flexible/-/rate-limiter-flexible-4.0.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/rate-limiter-flexible@4.0.1/node_modules/rate-limiter-flexible"
+      },
+      "react": {
+        "from": "react",
+        "version": "18.3.1",
+        "resolved": "https://registry.npmjs.org/react/-/react-18.3.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/react@18.3.1/node_modules/react"
+      },
+      "react-day-picker": {
+        "from": "react-day-picker",
+        "version": "9.8.0",
+        "resolved": "https://registry.npmjs.org/react-day-picker/-/react-day-picker-9.8.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/react-day-picker@9.8.0_react@18.3.1/node_modules/react-day-picker"
+      },
+      "react-dom": {
+        "from": "react-dom",
+        "version": "18.3.1",
+        "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/react-dom@18.3.1_react@18.3.1/node_modules/react-dom"
+      },
+      "react-hook-form": {
+        "from": "react-hook-form",
+        "version": "7.60.0",
+        "resolved": "https://registry.npmjs.org/react-hook-form/-/react-hook-form-7.60.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/react-hook-form@7.60.0_react@18.3.1/node_modules/react-hook-form"
+      },
+      "react-hot-toast": {
+        "from": "react-hot-toast",
+        "version": "2.5.2",
+        "resolved": "https://registry.npmjs.org/react-hot-toast/-/react-hot-toast-2.5.2.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/react-hot-toast@2.5.2_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/react-hot-toast"
+      },
+      "react-intersection-observer": {
+        "from": "react-intersection-observer",
+        "version": "9.16.0",
+        "resolved": "https://registry.npmjs.org/react-intersection-observer/-/react-intersection-observer-9.16.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/react-intersection-observer@9.16.0_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/react-intersection-observer"
+      },
+      "recharts": {
+        "from": "recharts",
+        "version": "2.15.4",
+        "resolved": "https://registry.npmjs.org/recharts/-/recharts-2.15.4.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/recharts@2.15.4_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/recharts"
+      },
+      "superjson": {
+        "from": "superjson",
+        "version": "2.2.2",
+        "resolved": "https://registry.npmjs.org/superjson/-/superjson-2.2.2.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/superjson@2.2.2/node_modules/superjson"
+      },
+      "swr": {
+        "from": "swr",
+        "version": "2.3.4",
+        "resolved": "https://registry.npmjs.org/swr/-/swr-2.3.4.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/swr@2.3.4_react@18.3.1/node_modules/swr"
+      },
+      "tailwind-merge": {
+        "from": "tailwind-merge",
+        "version": "2.6.0",
+        "resolved": "https://registry.npmjs.org/tailwind-merge/-/tailwind-merge-2.6.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/tailwind-merge@2.6.0/node_modules/tailwind-merge"
+      },
+      "tailwindcss-animate": {
+        "from": "tailwindcss-animate",
+        "version": "1.0.7",
+        "resolved": "https://registry.npmjs.org/tailwindcss-animate/-/tailwindcss-animate-1.0.7.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/tailwindcss-animate@1.0.7_tailwindcss@3.4.17/node_modules/tailwindcss-animate"
+      },
+      "three": {
+        "from": "three",
+        "version": "0.160.1",
+        "resolved": "https://registry.npmjs.org/three/-/three-0.160.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/three@0.160.1/node_modules/three"
+      },
+      "winston": {
+        "from": "winston",
+        "version": "3.17.0",
+        "resolved": "https://registry.npmjs.org/winston/-/winston-3.17.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/winston@3.17.0/node_modules/winston"
+      },
+      "zod": {
+        "from": "zod",
+        "version": "3.25.74",
+        "resolved": "https://registry.npmjs.org/zod/-/zod-3.25.74.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/zod@3.25.74/node_modules/zod"
+      },
+      "zustand": {
+        "from": "zustand",
+        "version": "5.0.6",
+        "resolved": "https://registry.npmjs.org/zustand/-/zustand-5.0.6.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/zustand@5.0.6_@types+react@18.3.23_immer@10.1.1_react@18.3.1_use-sync-external-store@1.5.0_react@18.3.1_/node_modules/zustand"
+      }
+    },
+    "devDependencies": {
+      "@tailwindcss/forms": {
+        "from": "@tailwindcss/forms",
+        "version": "0.5.10",
+        "resolved": "https://registry.npmjs.org/@tailwindcss/forms/-/forms-0.5.10.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@tailwindcss+forms@0.5.10_tailwindcss@3.4.17/node_modules/@tailwindcss/forms"
+      },
+      "@testing-library/jest-dom": {
+        "from": "@testing-library/jest-dom",
+        "version": "6.6.3",
+        "resolved": "https://registry.npmjs.org/@testing-library/jest-dom/-/jest-dom-6.6.3.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@testing-library+jest-dom@6.6.3/node_modules/@testing-library/jest-dom"
+      },
+      "@testing-library/react": {
+        "from": "@testing-library/react",
+        "version": "14.3.1",
+        "resolved": "https://registry.npmjs.org/@testing-library/react/-/react-14.3.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@testing-library+react@14.3.1_@types+react@18.3.23_react-dom@18.3.1_react@18.3.1__react@18.3.1/node_modules/@testing-library/react"
+      },
+      "@types/js-cookie": {
+        "from": "@types/js-cookie",
+        "version": "3.0.6",
+        "resolved": "https://registry.npmjs.org/@types/js-cookie/-/js-cookie-3.0.6.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@types+js-cookie@3.0.6/node_modules/@types/js-cookie"
+      },
+      "@types/jsonwebtoken": {
+        "from": "@types/jsonwebtoken",
+        "version": "9.0.10",
+        "resolved": "https://registry.npmjs.org/@types/jsonwebtoken/-/jsonwebtoken-9.0.10.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@types+jsonwebtoken@9.0.10/node_modules/@types/jsonwebtoken"
+      },
+      "@types/node": {
+        "from": "@types/node",
+        "version": "20.19.4",
+        "resolved": "https://registry.npmjs.org/@types/node/-/node-20.19.4.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@types+node@20.19.4/node_modules/@types/node"
+      },
+      "@types/react": {
+        "from": "@types/react",
+        "version": "18.3.23",
+        "resolved": "https://registry.npmjs.org/@types/react/-/react-18.3.23.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@types+react@18.3.23/node_modules/@types/react"
+      },
+      "@types/react-day-picker": {
+        "from": "@types/react-day-picker",
+        "version": "5.3.0",
+        "resolved": "https://registry.npmjs.org/@types/react-day-picker/-/react-day-picker-5.3.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@types+react-day-picker@5.3.0_react@18.3.1/node_modules/@types/react-day-picker"
+      },
+      "@types/react-dom": {
+        "from": "@types/react-dom",
+        "version": "18.3.7",
+        "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-18.3.7.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@types+react-dom@18.3.7_@types+react@18.3.23/node_modules/@types/react-dom"
+      },
+      "@types/three": {
+        "from": "@types/three",
+        "version": "0.160.0",
+        "resolved": "https://registry.npmjs.org/@types/three/-/three-0.160.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/@types+three@0.160.0/node_modules/@types/three"
+      },
+      "autoprefixer": {
+        "from": "autoprefixer",
+        "version": "10.4.21",
+        "resolved": "https://registry.npmjs.org/autoprefixer/-/autoprefixer-10.4.21.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/autoprefixer@10.4.21_postcss@8.5.6/node_modules/autoprefixer"
+      },
+      "cypress": {
+        "from": "cypress",
+        "version": "13.17.0",
+        "resolved": "https://registry.npmjs.org/cypress/-/cypress-13.17.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/cypress@13.17.0/node_modules/cypress"
+      },
+      "eslint": {
+        "from": "eslint",
+        "version": "8.57.1",
+        "resolved": "https://registry.npmjs.org/eslint/-/eslint-8.57.1.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/eslint@8.57.1/node_modules/eslint"
+      },
+      "eslint-config-next": {
+        "from": "eslint-config-next",
+        "version": "14.1.0",
+        "resolved": "https://registry.npmjs.org/eslint-config-next/-/eslint-config-next-14.1.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/eslint-config-next@14.1.0_eslint@8.57.1_typescript@5.8.3/node_modules/eslint-config-next"
+      },
+      "jest": {
+        "from": "jest",
+        "version": "29.7.0",
+        "resolved": "https://registry.npmjs.org/jest/-/jest-29.7.0.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/jest@29.7.0_@types+node@20.19.4/node_modules/jest"
+      },
+      "postcss": {
+        "from": "postcss",
+        "version": "8.5.6",
+        "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.6.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/postcss@8.5.6/node_modules/postcss"
+      },
+      "prettier": {
+        "from": "prettier",
+        "version": "3.6.2",
+        "resolved": "https://registry.npmjs.org/prettier/-/prettier-3.6.2.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/prettier@3.6.2/node_modules/prettier"
+      },
+      "tailwindcss": {
+        "from": "tailwindcss",
+        "version": "3.4.17",
+        "resolved": "https://registry.npmjs.org/tailwindcss/-/tailwindcss-3.4.17.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/tailwindcss@3.4.17/node_modules/tailwindcss"
+      },
+      "typescript": {
+        "from": "typescript",
+        "version": "5.8.3",
+        "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.8.3.tgz",
+        "path": "/home/kali/multipaga/node_modules/.pnpm/typescript@5.8.3/node_modules/typescript"
+      }
+    }
+  }
+]

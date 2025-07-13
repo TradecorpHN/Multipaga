@@ -17,13 +17,30 @@ import {
   HelpCircle,
   ChevronRight
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+// Importaciones corregidas según tsconfig.json (@/* apunta a ./src/*)
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Button } from '@/presentation/components/ui/Button'
+import { Badge } from '@/presentation/components/ui/Badge'
 import { useRouter } from 'next/navigation'
-import { useAuthStore } from '@/stores/auth.store'
+// Usando el hook de autenticación del contexto
+import { useAuth } from '@/presentation/contexts/AuthContext'
 
-const settingsCategories = [
+// Tipos para mejor type safety
+interface SettingsItem {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+  href: string;
+  badge: string | null;
+  badgeVariant?: 'default' | 'secondary' | 'outline' | 'destructive' | 'success';
+}
+
+interface SettingsCategory {
+  title: string;
+  items: SettingsItem[];
+}
+
+const settingsCategories: SettingsCategory[] = [
   {
     title: 'Account',
     items: [
@@ -40,7 +57,7 @@ const settingsCategories = [
         description: 'Password, two-factor authentication, and security settings',
         href: '/settings/security',
         badge: 'Recommended',
-        badgeVariant: 'secondary' as const,
+        badgeVariant: 'secondary',
       },
       {
         icon: Bell,
@@ -67,7 +84,7 @@ const settingsCategories = [
         description: 'Invite team members and manage permissions',
         href: '/settings/team',
         badge: 'Pro',
-        badgeVariant: 'default' as const,
+        badgeVariant: 'default',
       },
       {
         icon: CreditCard,
@@ -101,7 +118,7 @@ const settingsCategories = [
         description: 'Advanced configuration and debugging tools',
         href: '/settings/developer',
         badge: 'Beta',
-        badgeVariant: 'outline' as const,
+        badgeVariant: 'outline',
       },
     ],
   },
@@ -135,7 +152,8 @@ const settingsCategories = [
 
 export default function SettingsPage() {
   const router = useRouter()
-  const user = useAuthStore((state) => state.user)
+  // Usando el contexto de auth que devuelve authState
+  const { authState } = useAuth()
 
   return (
     <div className="flex-1 space-y-6 p-8 pt-6">
@@ -159,7 +177,7 @@ export default function SettingsPage() {
               <Badge variant="success">Verified</Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Member since {new Date(user?.created_at || Date.now()).toLocaleDateString()}
+              Member since {authState?.expiresAt ? new Date(authState.expiresAt).toLocaleDateString() : 'N/A'}
             </p>
           </CardContent>
         </Card>

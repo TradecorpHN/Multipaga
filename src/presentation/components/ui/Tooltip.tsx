@@ -491,7 +491,8 @@ const DateTooltip = React.forwardRef<HTMLButtonElement, DateTooltipProps>(({
   const dateObj = typeof date === 'string' ? new Date(date) : date
   
   const formatDate = (date: Date, format: string) => {
-    const options: Intl.DateTimeFormatOptions = {
+    // ARREGLADO: Tipos correctos para DateTimeFormatOptions
+    const optionsMap: Record<string, Intl.DateTimeFormatOptions> = {
       full: { 
         year: 'numeric', 
         month: 'long', 
@@ -513,7 +514,9 @@ const DateTooltip = React.forwardRef<HTMLButtonElement, DateTooltipProps>(({
         month: 'short', 
         day: 'numeric'
       }
-    }[format] || {}
+    }
+
+    const options = optionsMap[format] || optionsMap.full
 
     return new Intl.DateTimeFormat('es-HN', options).format(date)
   }
@@ -557,8 +560,8 @@ const DateTooltip = React.forwardRef<HTMLButtonElement, DateTooltipProps>(({
 })
 DateTooltip.displayName = 'DateTooltip'
 
-// Hook para tooltip controlado
-export const useTooltip = (initialOpen = false) => {
+// Hook para tooltip controlado - REMOVIDA LA REDECLARACIÓN
+const useTooltip = (initialOpen = false) => {
   const [open, setOpen] = React.useState(initialOpen)
 
   const show = React.useCallback(() => setOpen(true), [])

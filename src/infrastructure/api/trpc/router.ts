@@ -72,10 +72,35 @@ const PaginationSchema = z.object({
   offset: z.number().min(0).default(0),
   cursor: z.string().optional(),
 })
+
+const TimeRangeSchema = z.object({
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional()
+}).optional();
+
 const DateRangeSchema = z.object({
   created_after: z.string().datetime().optional(),
   created_before: z.string().datetime().optional(),
 })
+
+// ========== ENUMS ESPECÍFICOS DE HYPERSWITCH ==========
+const PayoutTypeEnum = z.enum(['card', 'bank', 'wallet'])
+const PayoutStatusEnum = z.enum([
+  'success',
+  'failed', 
+  'cancelled',
+  'initiated',
+  'expired',
+  'reversed',
+  'pending',
+  'ineligible',
+  'requires_creation',
+  'requires_confirmation',
+  'requires_payout_method_data',
+  'requires_fulfillment',
+  'requires_vendor_account_creation'
+])
+
 const PaymentCreateSchema = z.object({
   amount: z.number().positive('Amount must be positive'),
   currency: z.string().length(3, 'Currency must be 3 characters'),
@@ -90,12 +115,14 @@ const PaymentCreateSchema = z.object({
   setup_future_usage: z.enum(['off_session', 'on_session']).optional(),
   metadata: z.record(z.string()).optional(),
 })
+
 const PaymentUpdateSchema = z.object({
   paymentId: z.string().min(1),
   amount: z.number().positive().optional(),
   description: z.string().max(1000).optional(),
   metadata: z.record(z.string()).optional(),
 })
+
 const CustomerCreateSchema = z.object({
   customer_id: z.string().min(1).max(64),
   name: z.string().max(100).optional(),
@@ -112,6 +139,7 @@ const CustomerCreateSchema = z.object({
   }).optional(),
   metadata: z.record(z.string()).optional(),
 })
+
 const RefundCreateSchema = z.object({
   payment_id: z.string().min(1),
   amount: z.number().positive().optional(),
@@ -125,8 +153,44 @@ const RefundCreateSchema = z.object({
   metadata: z.record(z.string()).optional(),
 })
 
+// ========== PAYOUT SCHEMAS CORREGIDOS ==========
+const PayoutCreateSchema = z.object({
+  amount: z.number().positive('Amount must be positive'),
+  currency: z.string().length(3, 'Currency must be 3 characters'),
+  customer_id: z.string().min(1),
+  description: z.string().max(1000).optional(),
+  statement_descriptor: z.string().max(22).optional(),
+  payout_type: PayoutTypeEnum.default('bank'),
+  billing: z.object({
+    address: z.object({
+      line1: z.string().optional(),
+      line2: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      zip: z.string().optional(),
+      country: z.string().length(2).optional(),
+      first_name: z.string().optional(),
+      last_name: z.string().optional(),
+    }).optional(),
+    email: z.string().email().optional(),
+    phone: z.object({
+      number: z.string().optional(),
+      country_code: z.string().optional(),
+    }).optional(),
+  }).optional(),
+  auto_fulfill: z.boolean().default(true),
+  confirm: z.boolean().default(false),
+  priority: z.enum(['instant', 'normal']).default('normal'),
+  metadata: z.record(z.string()).optional(),
+})
+
+const PayoutUpdateSchema = z.object({
+  payoutId: z.string().min(1),
+  description: z.string().max(1000).optional(),
+  metadata: z.record(z.string()).optional(),
+})
+
 // ========== ROUTERS ==========
-// REEMPLAZA SOLO ESTA SECCIÓN EN TU ARCHIVO router.ts
 const paymentsRouter = router({
   create: protectedProcedure.input(PaymentCreateSchema).mutation(async ({ input, ctx }) => {
     try {
@@ -258,7 +322,6 @@ const paymentsRouter = router({
     }
   }),
   
-  // ========== EXPORT ENDPOINT (NUEVO) ==========
   export: protectedProcedure
     .input(
       PaginationSchema.merge(DateRangeSchema).extend({
@@ -272,7 +335,6 @@ const paymentsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       try {
-        // Recupera todos los pagos con los filtros aplicados
         const payments = await ctx.hyperswitchClient.get('/payments', {
           params: {
             ...input,
@@ -421,7 +483,6 @@ const customersRouter = router({
       })
     }
   }),
-  // ========== EXPORT ENDPOINT ==========
   export: protectedProcedure
     .input(
       PaginationSchema.merge(DateRangeSchema).extend({
@@ -431,50 +492,278 @@ const customersRouter = router({
         format: z.enum(['csv', 'json']).default('csv'),
       })
     )
-   .mutation(async ({ input, ctx }) => {  // ✅ CAMBIAR A MUTATION
+   .mutation(async ({ input, ctx }) => {
     try {
-      // Recupera todos los pagos con los filtros aplicados
-      const payments = await ctx.hyperswitchClient.get('/payments', {
+      const customers = await ctx.hyperswitchClient.get('/customers', {
         params: {
           ...input,
           merchant_id: ctx.merchantId,
-          profile_id: ctx.profileId,
         }
       })
 
       if (input.format === 'json') {
         return {
           format: 'json',
-          data: payments,
-          content: JSON.stringify(payments, null, 2),
+          data: customers,
+          content: JSON.stringify(customers, null, 2),
           contentType: 'application/json',
-          filename: `payments-export-${new Date().toISOString().split('T')[0]}.json`
+          filename: `customers-export-${new Date().toISOString().split('T')[0]}.json`
         }
       } else {
         const fields = [
-          'payment_id', 'merchant_id', 'status', 'amount', 'currency',
-          'customer_id', 'description', 'payment_method', 'payment_method_type',
-          'created_at', 'modified_at', 'metadata'
+          'customer_id', 'merchant_id', 'name', 'email', 'phone',
+          'description', 'created_at', 'modified_at', 'metadata'
         ]
         const parser = new Json2csvParser({ fields, defaultValue: '' })
-        const csv = parser.parse(payments)
+        const csv = parser.parse(customers)
         return {
           format: 'csv',
           data: csv,
           content: csv,
           contentType: 'text/csv',
-          filename: `payments-export-${new Date().toISOString().split('T')[0]}.csv`
+          filename: `customers-export-${new Date().toISOString().split('T')[0]}.csv`
         }
       }
     } catch (error) {
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to export payments',
+        message: 'Failed to export customers',
       })
     }
   }),
 })
 
+// ========== PAYOUT ROUTER CORREGIDO ==========
+const payoutRouter = router({
+  create: protectedProcedure.input(PayoutCreateSchema).mutation(async ({ input, ctx }) => {
+    try {
+      const payout = await ctx.hyperswitchClient.post('/payouts', {
+        ...input,
+        merchant_id: ctx.merchantId,
+        profile_id: ctx.profileId,
+      });
+      return payout;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `Failed to create payout: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }),
+
+  get: protectedProcedure.input(z.object({ payoutId: z.string().min(1) })).query(async ({ input, ctx }) => {
+    try {
+      const payout = await ctx.hyperswitchClient.get(`/payouts/${input.payoutId}`);
+      return payout;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: `Payout not found: ${input.payoutId}`,
+      });
+    }
+  }),
+
+  // ✅ SCHEMA CORREGIDO CON TIPOS ESPECÍFICOS
+  list: protectedProcedure.input(
+    z.object({
+      limit: z.number().min(1).max(100).default(20),
+      offset: z.number().min(0).default(0),
+      cursor: z.string().optional(),
+      created_after: z.string().datetime().optional(),
+      created_before: z.string().datetime().optional(),
+      customer_id: z.string().optional(),
+      payout_status: z.array(PayoutStatusEnum).optional(), // ✅ CORREGIDO
+      payout_type: z.array(PayoutTypeEnum).optional(), // ✅ CORREGIDO
+      amount: z.object({
+        gte: z.number().optional(),
+        lte: z.number().optional(),
+      }).optional(),
+      currency: z.array(z.string()).optional(),
+      payout_id: z.string().optional(),
+    })
+  ).query(async ({ input, ctx }) => {
+    try {
+      const params = {
+        ...input,
+        merchant_id: ctx.merchantId,
+        profile_id: ctx.profileId,
+      };
+      
+      const payouts = await ctx.hyperswitchClient.get('/payouts', { params });
+      return payouts;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to fetch payouts',
+      });
+    }
+  }),
+
+  update: protectedProcedure.input(PayoutUpdateSchema).mutation(async ({ input, ctx }) => {
+    try {
+      const { payoutId, ...updateData } = input;
+      const payout = await ctx.hyperswitchClient.patch(
+        `/payouts/${payoutId}`,
+        updateData
+      );
+      return payout;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `Failed to update payout: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }),
+
+  confirm: protectedProcedure.input(z.object({
+    payoutId: z.string().min(1),
+    customer_acceptance: z.object({
+      accepted_at: z.string().datetime(),
+      online: z.object({
+        ip_address: z.string().ip().optional(),
+        user_agent: z.string().optional(),
+      }).optional(),
+    }).optional(),
+  })).mutation(async ({ input, ctx }) => {
+    try {
+      const { payoutId, ...confirmData } = input;
+      const payout = await ctx.hyperswitchClient.post(
+        `/payouts/${payoutId}/confirm`,
+        confirmData
+      );
+      return payout;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `Failed to confirm payout: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }),
+
+  // ✅ CORREGIDO: USAR payoutId EN LUGAR DE payout_id
+  cancel: protectedProcedure.input(z.object({
+    payoutId: z.string().min(1),
+    cancellation_reason: z.string().max(1000).optional(),
+  })).mutation(async ({ input, ctx }) => {
+    try {
+      const response = await ctx.hyperswitchClient.post(
+        `/payouts/${input.payoutId}/cancel`,
+        {
+          cancellation_reason: input.cancellation_reason
+        }
+      );
+      return response;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `Failed to cancel payout: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }),
+
+  fulfill: protectedProcedure.input(z.object({
+    payoutId: z.string().min(1),
+  })).mutation(async ({ input, ctx }) => {
+    try {
+      const payout = await ctx.hyperswitchClient.post(
+        `/payouts/${input.payoutId}/fulfill`,
+        {}
+      );
+      return payout;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `Failed to fulfill payout: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  }),
+
+  stats: protectedProcedure.input(DateRangeSchema.optional()).query(async ({ input, ctx }) => {
+    try {
+      const stats = await ctx.hyperswitchClient.get('/analytics/payouts', {
+        params: {
+          ...input,
+          merchant_id: ctx.merchantId,
+          profile_id: ctx.profileId,
+        }
+      });
+      return stats;
+    } catch (error) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to fetch payout statistics',
+      });
+    }
+  }),
+
+  export: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+        customer_id: z.string().optional(),
+        payout_status: z.array(PayoutStatusEnum).optional(), // ✅ CORREGIDO
+        payout_type: z.array(PayoutTypeEnum).optional(), // ✅ CORREGIDO
+        created_after: z.string().datetime().optional(),
+        created_before: z.string().datetime().optional(),
+        format: z.enum(['csv', 'json']).default('csv'),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      try {
+        const { format, ...params } = input;
+        const payouts = await ctx.hyperswitchClient.get('/payouts', {
+          params: {
+            ...params,
+            merchant_id: ctx.merchantId,
+            profile_id: ctx.profileId,
+          }
+        });
+
+        if (format === 'json') {
+          return {
+            format: 'json',
+            data: payouts,
+            content: JSON.stringify(payouts, null, 2),
+            contentType: 'application/json',
+            filename: `payouts-export-${new Date().toISOString().split('T')[0]}.json`
+          };
+        } else {
+          const fields = [
+            'payout_id', 'merchant_id', 'customer_id', 'amount', 'currency',
+            'payout_type', 'payout_method_type', 'payout_status', 'description',
+            'created', 'modified', 'metadata'
+          ];
+          const parser = new Json2csvParser({ fields, defaultValue: '' });
+          const csv = parser.parse(payouts);
+          return {
+            format: 'csv',
+            data: csv,
+            content: csv,
+            contentType: 'text/csv',
+            filename: `payouts-export-${new Date().toISOString().split('T')[0]}.csv`
+          };
+        }
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to export payouts',
+        });
+      }
+    }),
+
+  // ✅ AGREGADO: checkAvailability para resolver el error isAvailable
+  checkAvailability: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const health = await ctx.hyperswitchClient.get('/payouts/filters');
+      return { isAvailable: true, status: 'active' };
+    } catch (error) {
+      return { isAvailable: false, status: 'inactive' };
+    }
+  }),
+});
+
+// ========== REFUND ROUTER ==========
 const refundsRouter = router({
   create: protectedProcedure.input(RefundCreateSchema).mutation(async ({ input, ctx }) => {
     try {
@@ -652,6 +941,7 @@ const healthRouter = router({
     }
   }),
 })
+
 // ================== SCHEMAS DISPUTES ==================
 const DisputeStatusEnum = z.enum([
   'dispute_opened',
@@ -695,7 +985,6 @@ const DisputeIdSchema = z.object({ disputeId: z.string().min(1) })
 // ================== ROUTER DISPUTES ==================
 const disputesRouter = router({
   list: protectedProcedure.input(DisputeListSchema).query(async ({ input, ctx }) => {
-    // Implementa el fetch según tu lógica (DB/API interna o agregando si Hyperswitch lo soporta)
     const disputes = await ctx.hyperswitchClient.get('/disputes', {
       params: {
         ...input,
@@ -749,7 +1038,6 @@ const disputesRouter = router({
   }),
 })
 
-// Schema para filtrar mandates
 const MandateListSchema = z.object({
   limit: z.number().min(1).max(100).default(20),
   offset: z.number().min(0).default(0),
@@ -777,10 +1065,12 @@ export const mandatesRouter = router({
     })
   }),
 })
+
 // ========== ROUTER PRINCIPAL ==========
 export const appRouter = router({
   payments: paymentsRouter,
   customers: customersRouter,
+  payouts: payoutRouter,
   invoices: paymentsRouter,
   refunds: refundsRouter,
   analytics: analyticsRouter,

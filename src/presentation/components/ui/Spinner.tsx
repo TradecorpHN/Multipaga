@@ -1,430 +1,604 @@
-// /home/kali/multipaga/src/presentation/components/ui/Spinner.tsx
+// /home/kali/multipaga/src/presentation/components/ui/Tooltip.tsx
 // ──────────────────────────────────────────────────────────────────────────────
-// Spinner - Componente de carga animado con múltiples variantes
+// Tooltip - Componente de tooltip accesible con múltiples variantes
 // ──────────────────────────────────────────────────────────────────────────────
 
 'use client'
 
 import * as React from 'react'
+import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { Loader2, RefreshCw, RotateCcw } from 'lucide-react'
+import { 
+  Info, 
+  HelpCircle, 
+  AlertCircle, 
+  CheckCircle, 
+  X,
+  ExternalLink,
+  Copy,
+  Share,
+  Calendar,
+  Clock,
+  User,
+  Mail,
+  Phone,
+} from 'lucide-react'
 import { cn } from '@/presentation/lib/utils'
 
-// Variantes del componente
-const spinnerVariants = cva(
-  'animate-spin flex-shrink-0',
+// Variantes del contenido
+const contentVariants = cva(
+  'z-50 overflow-hidden rounded-md border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
   {
     variants: {
       variant: {
-        default: 'text-primary',
-        destructive: 'text-destructive',
-        success: 'text-success',
-        warning: 'text-warning',
-        muted: 'text-muted-foreground',
-        accent: 'text-accent-foreground',
-        white: 'text-white',
+        default: 'bg-popover text-popover-foreground border',
+        info: 'bg-blue-500 text-white border-blue-500',
+        success: 'bg-green-500 text-white border-green-500',
+        warning: 'bg-yellow-500 text-white border-yellow-500',
+        destructive: 'bg-red-500 text-white border-red-500',
+        inverse: 'bg-foreground text-background border-foreground',
       },
       size: {
-        xs: 'w-3 h-3',
-        sm: 'w-4 h-4',
-        default: 'w-6 h-6',
-        lg: 'w-8 h-8',
-        xl: 'w-12 h-12',
-        '2xl': 'w-16 h-16',
-      },
-      speed: {
-        slow: 'animate-spin-slow',
-        default: 'animate-spin',
-        fast: 'animate-spin-fast',
+        sm: 'px-2 py-1 text-xs',
+        default: 'px-3 py-1.5 text-sm',
+        lg: 'px-4 py-2 text-base',
       },
     },
     defaultVariants: {
       variant: 'default',
       size: 'default',
-      speed: 'default',
     },
   }
 )
 
-// Props del componente
-interface SpinnerProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof spinnerVariants> {
-  // Contenido y estado
-  label?: string
+// Componente Provider
+const TooltipProvider = TooltipPrimitive.Provider
+
+// Componente raíz
+const Tooltip = TooltipPrimitive.Root
+
+// Trigger
+const TooltipTrigger = TooltipPrimitive.Trigger
+
+// Portal
+const TooltipPortal = TooltipPrimitive.Portal
+
+// Content
+interface TooltipContentProps
+  extends React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>,
+    VariantProps<typeof contentVariants> {
+  title?: string
   description?: string
-  icon?: 'loader' | 'refresh' | 'rotate' | React.ReactNode
-  
-  // Comportamiento
-  overlay?: boolean
-  blur?: boolean
-  
-  // Estilos personalizados
-  className?: string
-  iconClassName?: string
-  labelClassName?: string
-  descriptionClassName?: string
-  
-  // Accesibilidad
-  'aria-label'?: string
-  'aria-describedby'?: string
+  icon?: React.ReactNode
+  showArrow?: boolean
+  interactive?: boolean
+  maxWidth?: string
 }
 
-// Componente principal
-const Spinner = React.forwardRef<HTMLDivElement, SpinnerProps>(({
+const TooltipContent = React.forwardRef<
+  React.ElementRef<typeof TooltipPrimitive.Content>,
+  TooltipContentProps
+>(({ 
+  className, 
+  sideOffset = 4, 
   variant,
   size,
-  speed,
-  label,
+  title,
   description,
-  icon = 'loader',
-  overlay = false,
-  blur = false,
-  className,
-  iconClassName,
-  labelClassName,
-  descriptionClassName,
-  'aria-label': ariaLabel,
-  'aria-describedby': ariaDescribedBy,
-  ...props
-}, ref) => {
-  // Determinar el icono a usar
-  const renderIcon = () => {
-    if (React.isValidElement(icon)) {
-      return React.cloneElement(icon, {
-        className: cn(
-          spinnerVariants({ variant, size, speed }),
-          iconClassName
-        ),
-      })
-    }
-    
-    const IconComponent = {
-      loader: Loader2,
-      refresh: RefreshCw,
-      rotate: RotateCcw,
-    }[icon as string] || Loader2
-    
-    return (
-      <IconComponent
-        className={cn(
-          spinnerVariants({ variant, size, speed }),
-          iconClassName
+  icon,
+  showArrow = true,
+  interactive = false,
+  maxWidth = '300px',
+  children,
+  ...props 
+}, ref) => (
+  <TooltipPrimitive.Content
+    ref={ref}
+    sideOffset={sideOffset}
+    className={cn(
+      contentVariants({ variant, size }),
+      interactive && 'cursor-pointer',
+      className
+    )}
+    style={{ maxWidth }}
+    {...props}
+  >
+    {(title || description || icon) ? (
+      <div className="flex items-start gap-2">
+        {icon && (
+          <div className="flex-shrink-0 mt-0.5">
+            {icon}
+          </div>
         )}
-      />
-    )
-  }
-
-  // Contenido del spinner
-  const content = (
-    <div
-      ref={ref}
-      className={cn(
-        'flex items-center justify-center',
-        overlay && 'absolute inset-0 z-50',
-        blur && 'backdrop-blur-sm',
-        className
-      )}
-      role="status"
-      aria-label={ariaLabel || label || 'Loading'}
-      aria-describedby={ariaDescribedBy}
-      {...props}
-    >
-      <div className="flex flex-col items-center gap-3">
-        {renderIcon()}
-        
-        {/* Label */}
-        {label && (
-          <span
-            className={cn(
-              'text-sm font-medium text-foreground',
-              labelClassName
-            )}
-          >
-            {label}
-          </span>
-        )}
-        
-        {/* Description */}
-        {description && (
-          <p
-            className={cn(
-              'text-xs text-muted-foreground text-center max-w-sm',
-              descriptionClassName
-            )}
-          >
-            {description}
-          </p>
-        )}
+        <div className="flex-1 min-w-0">
+          {title && (
+            <div className="font-medium leading-none mb-1">
+              {title}
+            </div>
+          )}
+          {description && (
+            <div className="text-xs opacity-80 leading-relaxed">
+              {description}
+            </div>
+          )}
+          {children && (
+            <div className="mt-1">
+              {children}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  )
+    ) : (
+      children
+    )}
+    {showArrow && <TooltipPrimitive.Arrow className="fill-current" />}
+  </TooltipPrimitive.Content>
+))
+TooltipContent.displayName = TooltipPrimitive.Content.displayName
 
-  // Si es overlay, envolver en un contenedor con fondo
-  if (overlay) {
-    return (
-      <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
-        {content}
-      </div>
-    )
-  }
-
-  return content
-})
-
-Spinner.displayName = 'Spinner'
-
-// Componente de spinner inline
-interface InlineSpinnerProps extends Omit<SpinnerProps, 'label' | 'description'> {
-  text?: string
-  position?: 'left' | 'right'
+// Componente de tooltip simple
+interface SimpleTooltipProps {
+  children: React.ReactNode
+  content: React.ReactNode
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  align?: 'start' | 'center' | 'end'
+  variant?: VariantProps<typeof contentVariants>['variant']
+  size?: VariantProps<typeof contentVariants>['size']
+  delayDuration?: number
+  disableHoverableContent?: boolean
+  disabled?: boolean
 }
 
-const InlineSpinner = React.forwardRef<HTMLDivElement, InlineSpinnerProps>(({
-  text,
-  position = 'left',
-  size = 'sm',
-  className,
-  ...props
+const SimpleTooltip = React.forwardRef<HTMLButtonElement, SimpleTooltipProps>(({
+  children,
+  content,
+  side = 'top',
+  align = 'center',
+  variant = 'default',
+  size = 'default',
+  delayDuration = 700,
+  disableHoverableContent = false,
+  disabled = false,
 }, ref) => {
-  const spinner = <Spinner ref={ref} size={size} {...props} />
-  
-  if (!text) {
-    return spinner
+  if (disabled) {
+    return <>{children}</>
   }
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
-      {position === 'left' && spinner}
-      <span className="text-sm">{text}</span>
-      {position === 'right' && spinner}
-    </div>
+    <TooltipProvider>
+      <Tooltip delayDuration={delayDuration} disableHoverableContent={disableHoverableContent}>
+        <TooltipTrigger asChild>
+          {children}
+        </TooltipTrigger>
+        <TooltipContent
+          side={side}
+          align={align}
+          variant={variant}
+          size={size}
+        >
+          {content}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 })
+SimpleTooltip.displayName = 'SimpleTooltip'
 
-InlineSpinner.displayName = 'InlineSpinner'
+// Componente de tooltip de ayuda
+interface HelpTooltipProps {
+  content: React.ReactNode
+  title?: string
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  size?: 'sm' | 'default' | 'lg'
+  triggerClassName?: string
+  iconSize?: 'sm' | 'default' | 'lg'
+}
 
-// Componente de spinner de botón
-interface ButtonSpinnerProps extends Omit<SpinnerProps, 'size' | 'label' | 'description'> {
+const HelpTooltip = React.forwardRef<HTMLButtonElement, HelpTooltipProps>(({
+  content,
+  title,
+  side = 'top',
+  size = 'default',
+  triggerClassName,
+  iconSize = 'default',
+}, ref) => {
+  const iconSizeMap = {
+    sm: 'w-3 h-3',
+    default: 'w-4 h-4',
+    lg: 'w-5 h-5',
+  }
+
+  return (
+    <SimpleTooltip
+      content={content}
+      side={side}
+      variant="info"
+      size={size}
+    >
+      <button
+        ref={ref}
+        type="button"
+        className={cn(
+          'inline-flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors',
+          triggerClassName
+        )}
+      >
+        <HelpCircle className={iconSizeMap[iconSize]} />
+        <span className="sr-only">Help</span>
+      </button>
+    </SimpleTooltip>
+  )
+})
+HelpTooltip.displayName = 'HelpTooltip'
+
+// Componente de tooltip de información
+interface InfoTooltipProps {
+  content: React.ReactNode
+  title?: string
+  variant?: 'info' | 'success' | 'warning' | 'destructive'
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  size?: 'sm' | 'default' | 'lg'
+  triggerClassName?: string
+  iconSize?: 'sm' | 'default' | 'lg'
+}
+
+const InfoTooltip = React.forwardRef<HTMLButtonElement, InfoTooltipProps>(({
+  content,
+  title,
+  variant = 'info',
+  side = 'top',
+  size = 'default',
+  triggerClassName,
+  iconSize = 'default',
+}, ref) => {
+  const iconSizeMap = {
+    sm: 'w-3 h-3',
+    default: 'w-4 h-4',
+    lg: 'w-5 h-5',
+  }
+
+  const iconMap = {
+    info: Info,
+    success: CheckCircle,
+    warning: AlertCircle,
+    destructive: AlertCircle,
+  }
+
+  const Icon = iconMap[variant]
+
+  return (
+    <SimpleTooltip
+      content={content}
+      side={side}
+      variant={variant}
+      size={size}
+    >
+      <button
+        ref={ref}
+        type="button"
+        className={cn(
+          'inline-flex items-center justify-center rounded-full transition-colors',
+          variant === 'info' && 'text-blue-500 hover:text-blue-600',
+          variant === 'success' && 'text-green-500 hover:text-green-600',
+          variant === 'warning' && 'text-yellow-500 hover:text-yellow-600',
+          variant === 'destructive' && 'text-red-500 hover:text-red-600',
+          triggerClassName
+        )}
+      >
+        <Icon className={iconSizeMap[iconSize]} />
+        <span className="sr-only">Information</span>
+      </button>
+    </SimpleTooltip>
+  )
+})
+InfoTooltip.displayName = 'InfoTooltip'
+
+// Componente de tooltip con acciones
+interface ActionTooltipProps {
+  children: React.ReactNode
+  title?: string
+  description?: string
+  actions?: Array<{
+    label: string
+    icon?: React.ReactNode
+    onClick: () => void
+    variant?: 'default' | 'destructive'
+  }>
+  side?: 'top' | 'right' | 'bottom' | 'left'
   size?: 'sm' | 'default' | 'lg'
 }
 
-const ButtonSpinner = React.forwardRef<HTMLDivElement, ButtonSpinnerProps>(({
+const ActionTooltip = React.forwardRef<HTMLButtonElement, ActionTooltipProps>(({
+  children,
+  title,
+  description,
+  actions = [],
+  side = 'top',
   size = 'default',
-  variant = 'white',
-  className,
-  ...props
 }, ref) => {
-  const sizeMap = {
-    sm: 'xs' as const,
-    default: 'sm' as const,
-    lg: 'default' as const,
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={300} disableHoverableContent={false}>
+        <TooltipTrigger asChild>
+          {children}
+        </TooltipTrigger>
+        <TooltipContent
+          side={side}
+          size={size}
+          interactive={true}
+          title={title}
+          description={description}
+        >
+          {actions.length > 0 && (
+            <div className="flex gap-1 mt-2">
+              {actions.map((action, index) => (
+                <button
+                  key={index}
+                  onClick={action.onClick}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors',
+                    action.variant === 'destructive'
+                      ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  )}
+                >
+                  {action.icon && (
+                    <span className="w-3 h-3">
+                      {action.icon}
+                    </span>
+                  )}
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+})
+ActionTooltip.displayName = 'ActionTooltip'
+
+// Componente de tooltip de perfil
+interface ProfileTooltipProps {
+  children: React.ReactNode
+  user: {
+    name: string
+    email?: string
+    avatar?: string
+    role?: string
+    status?: 'online' | 'offline' | 'away' | 'busy'
+  }
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  showActions?: boolean
+  onViewProfile?: () => void
+  onSendMessage?: () => void
+}
+
+const ProfileTooltip = React.forwardRef<HTMLButtonElement, ProfileTooltipProps>(({
+  children,
+  user,
+  side = 'top',
+  showActions = true,
+  onViewProfile,
+  onSendMessage,
+}, ref) => {
+  const statusColors = {
+    online: 'bg-green-500',
+    offline: 'bg-gray-500',
+    away: 'bg-yellow-500',
+    busy: 'bg-red-500',
   }
 
   return (
-    <Spinner
-      ref={ref}
-      size={sizeMap[size]}
-      variant={variant}
-      className={cn('mr-2', className)}
-      {...props}
-    />
+    <TooltipProvider>
+      <Tooltip delayDuration={500} disableHoverableContent={false}>
+        <TooltipTrigger asChild>
+          {children}
+        </TooltipTrigger>
+        <TooltipContent
+          side={side}
+          size="lg"
+          interactive={true}
+          maxWidth="280px"
+        >
+          <div className="flex items-start gap-3">
+            {/* Avatar */}
+            <div className="relative">
+              {user.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                  <User className="w-5 h-5 text-gray-500" />
+                </div>
+              )}
+              {user.status && (
+                <div className={cn(
+                  'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white',
+                  statusColors[user.status]
+                )} />
+              )}
+            </div>
+
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm truncate">
+                {user.name}
+              </div>
+              {user.email && (
+                <div className="text-xs opacity-80 truncate">
+                  {user.email}
+                </div>
+              )}
+              {user.role && (
+                <div className="text-xs opacity-60 mt-1">
+                  {user.role}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          {showActions && (
+            <div className="flex gap-1 mt-3">
+              {onViewProfile && (
+                <button
+                  onClick={onViewProfile}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
+                >
+                  <User className="w-3 h-3" />
+                  Ver perfil
+                </button>
+              )}
+              {onSendMessage && (
+                <button
+                  onClick={onSendMessage}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-white/10 text-white hover:bg-white/20 transition-colors"
+                >
+                  <Mail className="w-3 h-3" />
+                  Mensaje
+                </button>
+              )}
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 })
+ProfileTooltip.displayName = 'ProfileTooltip'
 
-ButtonSpinner.displayName = 'ButtonSpinner'
-
-// Componente de spinner de página
-interface PageSpinnerProps extends SpinnerProps {
-  fullScreen?: boolean
-  minHeight?: string
+// Componente de tooltip de fecha
+interface DateTooltipProps {
+  children: React.ReactNode
+  date: Date | string
+  format?: 'full' | 'date' | 'time' | 'relative'
+  side?: 'top' | 'right' | 'bottom' | 'left'
+  showRelative?: boolean
 }
 
-const PageSpinner = React.forwardRef<HTMLDivElement, PageSpinnerProps>(({
-  fullScreen = false,
-  minHeight = '400px',
-  size = 'xl',
-  label = 'Cargando...',
-  className,
-  ...props
+const DateTooltip = React.forwardRef<HTMLButtonElement, DateTooltipProps>(({
+  children,
+  date,
+  format = 'full',
+  side = 'top',
+  showRelative = true,
 }, ref) => {
-  const containerClass = fullScreen 
-    ? 'min-h-screen' 
-    : `min-h-[${minHeight}]`
+  const dateObj = typeof date === 'string' ? new Date(date) : date
+  
+  const formatDate = (date: Date, format: string) => {
+    // ARREGLADO: Tipos correctos para DateTimeFormatOptions
+    const optionsMap: Record<string, Intl.DateTimeFormatOptions> = {
+      full: { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      },
+      date: { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric'
+      },
+      time: { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      },
+      relative: { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric'
+      }
+    }
+
+    const options = optionsMap[format] || optionsMap.full
+
+    return new Intl.DateTimeFormat('es-HN', options).format(date)
+  }
+
+  const getRelativeTime = (date: Date) => {
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const seconds = Math.floor(diff / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    if (days > 0) return `hace ${days} día${days > 1 ? 's' : ''}`
+    if (hours > 0) return `hace ${hours} hora${hours > 1 ? 's' : ''}`
+    if (minutes > 0) return `hace ${minutes} minuto${minutes > 1 ? 's' : ''}`
+    return 'hace un momento'
+  }
 
   return (
-    <div className={cn(
-      'flex items-center justify-center',
-      containerClass,
-      className
-    )}>
-      <Spinner
-        ref={ref}
-        size={size}
-        label={label}
-        {...props}
-      />
-    </div>
-  )
-})
-
-PageSpinner.displayName = 'PageSpinner'
-
-// Componente de spinner de tarjeta
-interface CardSpinnerProps extends SpinnerProps {
-  height?: string
-}
-
-const CardSpinner = React.forwardRef<HTMLDivElement, CardSpinnerProps>(({
-  height = '200px',
-  size = 'lg',
-  className,
-  ...props
-}, ref) => {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-center rounded-lg bg-card',
-        className
-      )}
-      style={{ height }}
-    >
-      <Spinner
-        ref={ref}
-        size={size}
-        {...props}
-      />
-    </div>
-  )
-})
-
-CardSpinner.displayName = 'CardSpinner'
-
-// Componente de spinner de datos
-interface DataSpinnerProps extends SpinnerProps {
-  rows?: number
-  columns?: number
-}
-
-const DataSpinner = React.forwardRef<HTMLDivElement, DataSpinnerProps>(({
-  rows = 5,
-  columns = 4,
-  label = 'Cargando datos...',
-  className,
-  ...props
-}, ref) => {
-  return (
-    <div className={cn('space-y-4', className)}>
-      {/* Skeleton rows */}
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex space-x-4">
-          {Array.from({ length: columns }).map((_, j) => (
-            <div
-              key={j}
-              className="h-4 bg-muted rounded animate-pulse flex-1"
-            />
-          ))}
+    <SimpleTooltip
+      content={
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4" />
+          <div>
+            <div className="font-medium">
+              {formatDate(dateObj, format)}
+            </div>
+            {showRelative && format !== 'relative' && (
+              <div className="text-xs opacity-80">
+                {getRelativeTime(dateObj)}
+              </div>
+            )}
+          </div>
         </div>
-      ))}
-      
-      {/* Spinner overlay */}
-      <div className="flex items-center justify-center py-8">
-        <Spinner
-          ref={ref}
-          label={label}
-          {...props}
-        />
-      </div>
-    </div>
+      }
+      side={side}
+    >
+      {children}
+    </SimpleTooltip>
   )
 })
+DateTooltip.displayName = 'DateTooltip'
 
-DataSpinner.displayName = 'DataSpinner'
+// Hook para tooltip controlado - REMOVIDA LA REDECLARACIÓN
+const useTooltip = (initialOpen = false) => {
+  const [open, setOpen] = React.useState(initialOpen)
 
-// Hook para controlar estados de carga
-interface UseSpinnerReturn {
-  isLoading: boolean
-  startLoading: () => void
-  stopLoading: () => void
-  setLoading: (loading: boolean) => void
-}
-
-export const useSpinner = (initialState = false): UseSpinnerReturn => {
-  const [isLoading, setIsLoading] = React.useState(initialState)
-
-  const startLoading = React.useCallback(() => {
-    setIsLoading(true)
-  }, [])
-
-  const stopLoading = React.useCallback(() => {
-    setIsLoading(false)
-  }, [])
-
-  const setLoading = React.useCallback((loading: boolean) => {
-    setIsLoading(loading)
-  }, [])
+  const show = React.useCallback(() => setOpen(true), [])
+  const hide = React.useCallback(() => setOpen(false), [])
+  const toggle = React.useCallback(() => setOpen(prev => !prev), [])
 
   return {
-    isLoading,
-    startLoading,
-    stopLoading,
-    setLoading,
+    open,
+    setOpen,
+    show,
+    hide,
+    toggle,
   }
-}
-
-// Agregar estilos de animación personalizados
-const spinnerStyles = `
-  @keyframes spin-slow {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  
-  @keyframes spin-fast {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  
-  .animate-spin-slow {
-    animation: spin-slow 3s linear infinite;
-  }
-  
-  .animate-spin-fast {
-    animation: spin-fast 0.5s linear infinite;
-  }
-`
-
-// Inyectar estilos si no existen
-if (typeof window !== 'undefined' && !document.querySelector('#spinner-styles')) {
-  const style = document.createElement('style')
-  style.id = 'spinner-styles'
-  style.textContent = spinnerStyles
-  document.head.appendChild(style)
 }
 
 // Exports
-export { 
-  Spinner, 
-  InlineSpinner, 
-  ButtonSpinner, 
-  PageSpinner, 
-  CardSpinner, 
-  DataSpinner,
-  useSpinner 
+export {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+  TooltipPortal,
+  SimpleTooltip,
+  HelpTooltip,
+  InfoTooltip,
+  ActionTooltip,
+  ProfileTooltip,
+  DateTooltip,
+  useTooltip,
 }
 
-export type { 
-  SpinnerProps, 
-  InlineSpinnerProps, 
-  ButtonSpinnerProps, 
-  PageSpinnerProps, 
-  CardSpinnerProps, 
-  DataSpinnerProps 
+export type {
+  TooltipContentProps,
+  SimpleTooltipProps,
+  HelpTooltipProps,
+  InfoTooltipProps,
+  ActionTooltipProps,
+  ProfileTooltipProps,
+  DateTooltipProps,
 }

@@ -2,7 +2,6 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // tRPC Context - Configuración base y contexto para tRPC
 // ──────────────────────────────────────────────────────────────────────────────
-
 import { initTRPC, TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import SuperJSON from 'superjson'
@@ -48,6 +47,9 @@ export const router = t.router
 export const publicProcedure = t.procedure
 export const middleware = t.middleware
 
+// ✅ AGREGADO: Exportar createTRPCRouter (alias para router)
+export const createTRPCRouter = t.router
+
 /**
  * Middleware de autenticación para procedimientos protegidos
  */
@@ -82,9 +84,9 @@ export const protectedProcedure = publicProcedure.use(authMiddleware)
  * Middleware de rate limiting
  */
 const rateLimitMiddleware = middleware(async ({ ctx, next }) => {
-  const ipAddress = ctx.req.headers.get('x-forwarded-for') || 
-                   ctx.req.headers.get('x-real-ip') || 
-                   'unknown'
+  const ipAddress = ctx.req.headers.get('x-forwarded-for') ||
+    ctx.req.headers.get('x-real-ip') ||
+    'unknown'
 
   // TODO: Implementar rate limiting con Redis o memoria
   // Por ahora solo logging
@@ -115,8 +117,8 @@ export function createTRPCContext(req: NextRequest): Context {
     profileId: req.headers.get('x-profile-id') || undefined,
     apiKey: req.headers.get('authorization')?.replace('Bearer ', '') || undefined,
     userAgent: req.headers.get('user-agent') || undefined,
-    ipAddress: req.headers.get('x-forwarded-for') || 
-               req.headers.get('x-real-ip') || 
-               'unknown',
+    ipAddress: req.headers.get('x-forwarded-for') ||
+      req.headers.get('x-real-ip') ||
+      'unknown',
   }
 }

@@ -29,7 +29,7 @@ import {
   CreditCard
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { hyperswitch } from '@/lib/hyperswitch'
+// ✅ CORRECCIÓN: Usar el patrón de proxy API
 import type { RefundResponse } from '@/types/hyperswitch'
 
 // Refund Status Configuration
@@ -84,14 +84,27 @@ interface RefundFilters {
   amount_lte?: number
 }
 
-// Fetcher function
+// ✅ CORRECCIÓN: Fetcher function usando el proxy API
 const fetcher = async () => {
   try {
-    const response = await hyperswitch.listRefunds({
-      limit: 100,
+    const params = new URLSearchParams({
+      limit: '100',
       from: subDays(new Date(), 30).toISOString(),
     })
-    return response.data || []
+    
+    const response = await fetch(`/api/hyperswitch/refunds?${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return data.data || []
   } catch (error) {
     console.error('Error fetching refunds:', error)
     throw error

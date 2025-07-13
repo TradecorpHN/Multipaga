@@ -32,7 +32,8 @@ import {
   Clock
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { hyperswitch } from '@/lib/hyperswitch'
+// Importación corregida del cliente de Hyperswitch
+import { hyperswitchClient } from '/home/kali/multipaga/src/infrastructure/api/clients/HyperswitchClient'
 import type { PaymentResponse, RefundResponse } from '@/types/hyperswitch'
 
 // Transaction Type Configuration
@@ -67,6 +68,16 @@ const TransactionTypes = {
   }
 }
 
+// Transaction interface extendida para incluir propiedades necesarias
+interface ExtendedPaymentResponse extends PaymentResponse {
+  customer?: {
+    id?: string
+    email?: string
+    name?: string
+  }
+  updated_at?: string
+}
+
 // Transaction interface
 interface Transaction {
   id: string
@@ -99,21 +110,37 @@ const copyToClipboard = (text: string, label: string) => {
   toast.success(`${label} copiado al portapapeles`)
 }
 
-// Fetcher functions
-const fetchPayments = async (): Promise<PaymentResponse[]> => {
-  const response = await hyperswitch.listPayments({
-    limit: 100,
-    from: subDays(new Date(), 30).toISOString(),
-  })
-  return response.data || []
+// Fetcher functions usando el cliente corregido
+const fetchPayments = async (): Promise<ExtendedPaymentResponse[]> => {
+  try {
+    const fromDate = subDays(new Date(), 30).toISOString()
+    const response = await hyperswitchClient.get<{ data: ExtendedPaymentResponse[] }>('/payments', {
+      params: {
+        limit: 100,
+        from: fromDate,
+      }
+    })
+    return response.data || []
+  } catch (error) {
+    console.error('Error fetching payments:', error)
+    return []
+  }
 }
 
 const fetchRefunds = async (): Promise<RefundResponse[]> => {
-  const response = await hyperswitch.listRefunds({
-    limit: 100,
-    from: subDays(new Date(), 30).toISOString(),
-  })
-  return response.data || []
+  try {
+    const fromDate = subDays(new Date(), 30).toISOString()
+    const response = await hyperswitchClient.get<{ data: RefundResponse[] }>('/refunds', {
+      params: {
+        limit: 100,
+        from: fromDate,
+      }
+    })
+    return response.data || []
+  } catch (error) {
+    console.error('Error fetching refunds:', error)
+    return []
+  }
 }
 
 interface TransactionFilters {
@@ -139,7 +166,7 @@ export default function TransactionsPage() {
   const [selectedTimeRange, setSelectedTimeRange] = useState('7d')
 
   // Fetch data
-  const { data: payments, error: paymentsError, isLoading: paymentsLoading, mutate: mutatePayments } = useSWR<PaymentResponse[]>(
+  const { data: payments, error: paymentsError, isLoading: paymentsLoading, mutate: mutatePayments } = useSWR<ExtendedPaymentResponse[]>(
     'transactions-payments',
     fetchPayments,
     { revalidateOnFocus: false }
@@ -185,7 +212,7 @@ export default function TransactionsPage() {
           status: 'completed',
           reference_id: payment.payment_id,
           connector: payment.connector || 'unknown',
-          created_at: payment.updated || payment.created,
+          created_at: payment.updated_at || payment.created,
           description: `Captura del pago ${payment.payment_id}`,
           customer: payment.customer ? {
             id: payment.customer.id || payment.customer_id || '',

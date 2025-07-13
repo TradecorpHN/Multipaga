@@ -378,7 +378,7 @@ const LogoutAlertDialog = React.forwardRef<HTMLDivElement, LogoutAlertDialogProp
 
 LogoutAlertDialog.displayName = 'LogoutAlertDialog'
 
-// Hook para manejar alertas
+// Hook para manejar alertas - REMOVIDO LA REDECLARACIÓN
 interface UseAlertDialogReturn {
   isOpen: boolean
   open: () => void
@@ -388,7 +388,7 @@ interface UseAlertDialogReturn {
   data: any
 }
 
-export const useAlertDialog = (initialState = false): UseAlertDialogReturn => {
+const useAlertDialog = (initialState = false): UseAlertDialogReturn => {
   const [isOpen, setIsOpen] = React.useState(initialState)
   const [data, setData] = React.useState<any>(null)
 

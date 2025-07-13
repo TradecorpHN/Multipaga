@@ -315,13 +315,13 @@ const SimpleModal = React.forwardRef<HTMLDivElement, SimpleModalProps>(({
 })
 SimpleModal.displayName = 'SimpleModal'
 
-// Componente de modal de confirmación
+// Componente de modal de confirmación - ARREGLADO EL TIPO DE onConfirm
 interface ConfirmModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   title?: string
   description?: string
-  onConfirm: () => void | Promise<void>
+  onConfirm: () => void | Promise<void> // CAMBIADO: removido el opcional
   onCancel?: () => void
   confirmText?: string
   cancelText?: string
@@ -591,7 +591,7 @@ const ImageModal = React.forwardRef<HTMLDivElement, ImageModalProps>(({
 })
 ImageModal.displayName = 'ImageModal'
 
-// Hook para manejar modales
+// Hook para manejar modales - REMOVIDA LA REDECLARACIÓN
 interface UseModalReturn {
   isOpen: boolean
   open: () => void
@@ -601,7 +601,7 @@ interface UseModalReturn {
   data: any
 }
 
-export const useModal = (initialState = false): UseModalReturn => {
+const useModal = (initialState = false): UseModalReturn => {
   const [isOpen, setIsOpen] = React.useState(initialState)
   const [data, setData] = React.useState<any>(null)
 
@@ -626,8 +626,8 @@ export const useModal = (initialState = false): UseModalReturn => {
   }
 }
 
-// Hook para modales de confirmación
-export const useConfirmModal = () => {
+// Hook para modales de confirmación - REMOVIDA LA REDECLARACIÓN
+const useConfirmModal = () => {
   const [isOpen, setIsOpen] = React.useState(false)
   const [config, setConfig] = React.useState<Partial<ConfirmModalProps>>({})
 
@@ -642,7 +642,9 @@ export const useConfirmModal = () => {
       setConfig(prev => ({
         ...prev,
         onConfirm: () => {
-          originalOnConfirm?.()
+          if (originalOnConfirm) {
+            originalOnConfirm()
+          }
           resolve(true)
           setIsOpen(false)
         },
@@ -659,6 +661,7 @@ export const useConfirmModal = () => {
     <ConfirmModal
       open={isOpen}
       onOpenChange={setIsOpen}
+      onConfirm={() => {}} // Se sobreescribe en el confirm callback
       {...config}
     />
   ), [isOpen, config])

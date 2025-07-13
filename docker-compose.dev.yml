@@ -1,0 +1,66 @@
+# docker-compose.dev.yml - Configuración para desarrollo
+version: '3.8'
+
+services:
+  # ============================================
+  # Aplicación en modo desarrollo
+  # ============================================
+  multipaga-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: development
+    container_name: multipaga-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Puerto para debugging
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    volumes:
+      # Mount código fuente para hot reload
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - multipaga-dev-network
+    depends_on:
+      - redis-dev
+
+  # ============================================
+  # Redis para desarrollo
+  # ============================================
+  redis-dev:
+    image: redis:7-alpine
+    container_name: multipaga-redis-dev
+    ports:
+      - "6380:6379"
+    command: redis-server --save "" --appendonly no
+    networks:
+      - multipaga-dev-network
+
+  # ============================================
+  # PostgreSQL para desarrollo
+  # ============================================
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: multipaga-postgres-dev
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=multipaga_dev
+      - POSTGRES_USER=dev_user
+      - POSTGRES_PASSWORD=dev_password
+    volumes:
+      - postgres-dev-data:/var/lib/postgresql/data
+    networks:
+      - multipaga-dev-network
+
+volumes:
+  postgres-dev-data:
+
+networks:
+  multipaga-dev-network:
+    driver: bridge

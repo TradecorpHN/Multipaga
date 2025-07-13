@@ -1,0 +1,43 @@
+# Dockerfile.dev - Dockerfile optimizado para desarrollo
+FROM node:18-alpine AS development
+
+# Instalar dependencias del sistema
+RUN apk add --no-cache \
+    libc6-compat \
+    curl \
+    git \
+    && rm -rf /var/cache/apk/*
+
+# Habilitar corepack para pnpm
+RUN corepack enable
+
+# Crear directorio de trabajo
+WORKDIR /app
+
+# Instalar dependencias globales de desarrollo
+RUN pnpm add -g nodemon
+
+# Copiar package files
+COPY package.json pnpm-lock.yaml* ./
+
+# Instalar dependencias
+RUN pnpm install
+
+# Copiar código fuente
+COPY . .
+
+# Configurar variables de entorno para desarrollo
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+
+# Exponer puerto para la aplicación y debugging
+EXPOSE 3000 9229
+
+# Health check para desarrollo
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000 || exit 1
+
+# Comando para desarrollo con hot reload
+CMD ["pnpm", "dev"]

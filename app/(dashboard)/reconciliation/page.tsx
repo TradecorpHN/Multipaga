@@ -32,7 +32,8 @@ import {
   BarChart3
 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
-import { hyperswitch } from '@/lib/hyperswitch'
+// Importación corregida del cliente de Hyperswitch
+import { hyperswitchClient } from '/home/kali/multipaga/src/infrastructure/api/clients/HyperswitchClient'
 import type { PaymentResponse, RefundResponse } from '@/types/hyperswitch'
 
 // Reconciliation Status
@@ -99,22 +100,38 @@ const formatCurrency = (amount: number, currency: string): string => {
   }).format(amount / 100)
 }
 
-// Fetcher functions
+// Fetcher functions usando el cliente corregido
 const fetchPayments = async (): Promise<PaymentResponse[]> => {
-  const response = await hyperswitch.listPayments({
-    limit: 100,
-    status: 'succeeded',
-    from: subDays(new Date(), 30).toISOString(),
-  })
-  return response.data || []
+  try {
+    const fromDate = subDays(new Date(), 30).toISOString()
+    const response = await hyperswitchClient.get<{ data: PaymentResponse[] }>('/payments', {
+      params: {
+        limit: 100,
+        status: 'succeeded',
+        from: fromDate,
+      }
+    })
+    return response.data || []
+  } catch (error) {
+    console.error('Error fetching payments:', error)
+    return []
+  }
 }
 
 const fetchRefunds = async (): Promise<RefundResponse[]> => {
-  const response = await hyperswitch.listRefunds({
-    limit: 100,
-    from: subDays(new Date(), 30).toISOString(),
-  })
-  return response.data || []
+  try {
+    const fromDate = subDays(new Date(), 30).toISOString()
+    const response = await hyperswitchClient.get<{ data: RefundResponse[] }>('/refunds', {
+      params: {
+        limit: 100,
+        from: fromDate,
+      }
+    })
+    return response.data || []
+  } catch (error) {
+    console.error('Error fetching refunds:', error)
+    return []
+  }
 }
 
 export default function ReconciliationPage() {

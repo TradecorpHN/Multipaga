@@ -63,7 +63,15 @@ import { copyToClipboard } from '@/presentation/lib/utils/clipboard'
 import toast from 'react-hot-toast'
 import { cn } from '@/presentation/lib/utils'
 
-// Tipos basados en Hyperswitch API
+// Tipos basados en Hyperswitch API - estructuras de dirección corregidas
+interface AddressDetails {
+  country: string
+  city: string
+  street: string
+  postal_code: string
+  state?: string
+}
+
 interface PaymentMethod {
   payment_method: string
   payment_method_type?: string
@@ -105,6 +113,62 @@ interface EventLog {
   timestamp: string
   description: string
   metadata?: Record<string, any>
+}
+
+// Interfaces extendidas para el pago
+interface ExtendedCustomer {
+  id?: string
+  email?: string
+  name?: string
+  phone?: string
+}
+
+interface ExtendedBillingDetails {
+  address?: AddressDetails
+  phone?: {
+    number?: string
+    country_code?: string
+  }
+  email?: string
+}
+
+interface ExtendedShippingDetails {
+  address?: AddressDetails
+  phone?: {
+    number?: string
+    country_code?: string
+  }
+  name?: string
+  email?: string
+}
+
+interface ExtendedPaymentResponse {
+  payment_id: string
+  merchant_id: string
+  status: string
+  amount: number
+  currency: string
+  description?: string
+  statement_descriptor_name?: string
+  created_at: string
+  updated_at?: string
+  payment_method?: string
+  payment_method_type?: string
+  payment_method_data?: any
+  connector?: string
+  merchant_connector_id?: string
+  attempt_count?: number
+  amount_capturable?: number
+  capture_method?: string
+  customer_id?: string
+  customer?: ExtendedCustomer
+  billing?: ExtendedBillingDetails
+  shipping?: ExtendedShippingDetails
+  metadata?: Record<string, any>
+  error_message?: string
+  error_code?: string
+  refunds?: RefundDetails[]
+  disputes?: DisputeDetails[]
 }
 
 // Status configurations
@@ -206,37 +270,40 @@ export default function TransactionDetailPage() {
     toast.success('Detalles exportados')
   }
 
+  // Castear el pago actual al tipo extendido
+  const extendedPayment = currentPayment as ExtendedPaymentResponse | null
+
   // Mock data for events (en producción vendría de la API)
   const mockEvents: EventLog[] = useMemo(() => {
-    if (!currentPayment) return []
+    if (!extendedPayment) return []
     
     return [
       {
         event_id: '1',
         event_type: 'payment_created',
-        timestamp: currentPayment.created_at,
+        timestamp: extendedPayment.created_at,
         description: 'Pago creado',
       },
-      ...(currentPayment.status === 'succeeded' ? [{
+      ...(extendedPayment.status === 'succeeded' ? [{
         event_id: '2',
         event_type: 'payment_succeeded',
-        timestamp: currentPayment.updated_at || currentPayment.created_at,
+        timestamp: extendedPayment.updated_at || extendedPayment.created_at,
         description: 'Pago completado exitosamente',
       }] : []),
-      ...(currentPayment.status === 'failed' ? [{
+      ...(extendedPayment.status === 'failed' ? [{
         event_id: '3',
         event_type: 'payment_failed',
-        timestamp: currentPayment.updated_at || currentPayment.created_at,
+        timestamp: extendedPayment.updated_at || extendedPayment.created_at,
         description: 'Pago falló',
         metadata: {
-          error_code: currentPayment.error_code,
-          error_message: currentPayment.error_message,
+          error_code: extendedPayment.error_code,
+          error_message: extendedPayment.error_message,
         }
       }] : []),
     ]
-  }, [currentPayment])
+  }, [extendedPayment])
 
-  if (isLoading && !currentPayment) {
+  if (isLoading && !extendedPayment) {
     return (
       <div className="container mx-auto p-6 space-y-6">
         <Skeleton className="h-12 w-64" />
@@ -250,7 +317,7 @@ export default function TransactionDetailPage() {
     )
   }
 
-  if (error || !currentPayment) {
+  if (error || !extendedPayment) {
     return (
       <div className="container mx-auto p-6">
         <Alert variant="destructive">
@@ -272,7 +339,7 @@ export default function TransactionDetailPage() {
     )
   }
 
-  const status = statusConfig[currentPayment.status as keyof typeof statusConfig] || statusConfig.processing
+  const status = statusConfig[extendedPayment.status as keyof typeof statusConfig] || statusConfig.processing
   const StatusIcon = status.icon
 
   return (
@@ -329,17 +396,17 @@ export default function TransactionDetailPage() {
             <div>
               <p className="font-semibold">{status.label}</p>
               <p className="text-sm text-muted-foreground">
-                Actualizado {formatDateTime(currentPayment.updated_at || currentPayment.created_at)}
+                Actualizado {formatDateTime(extendedPayment.updated_at || extendedPayment.created_at)}
               </p>
             </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold">
-              {formatCurrency(currentPayment.amount / 100, currentPayment.currency)}
+              {formatCurrency(extendedPayment.amount / 100, extendedPayment.currency)}
             </p>
-            {currentPayment.amount_capturable && currentPayment.amount_capturable !== currentPayment.amount && (
+            {extendedPayment.amount_capturable && extendedPayment.amount_capturable !== extendedPayment.amount && (
               <p className="text-sm text-muted-foreground">
-                Capturable: {formatCurrency(currentPayment.amount_capturable / 100, currentPayment.currency)}
+                Capturable: {formatCurrency(extendedPayment.amount_capturable / 100, extendedPayment.currency)}
               </p>
             )}
           </div>
@@ -355,11 +422,11 @@ export default function TransactionDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {currentPayment.payment_method || 'N/A'}
+              {extendedPayment.payment_method || 'N/A'}
             </div>
-            {currentPayment.payment_method_type && (
+            {extendedPayment.payment_method_type && (
               <p className="text-xs text-muted-foreground">
-                {currentPayment.payment_method_type}
+                {extendedPayment.payment_method_type}
               </p>
             )}
           </CardContent>
@@ -372,11 +439,11 @@ export default function TransactionDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {currentPayment.connector || 'N/A'}
+              {extendedPayment.connector || 'N/A'}
             </div>
-            {currentPayment.merchant_connector_id && (
+            {extendedPayment.merchant_connector_id && (
               <p className="text-xs text-muted-foreground truncate">
-                {currentPayment.merchant_connector_id}
+                {extendedPayment.merchant_connector_id}
               </p>
             )}
           </CardContent>
@@ -389,7 +456,7 @@ export default function TransactionDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {currentPayment.attempt_count || 1}
+              {extendedPayment.attempt_count || 1}
             </div>
             <p className="text-xs text-muted-foreground">
               Intentos de pago
@@ -404,10 +471,10 @@ export default function TransactionDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {format(new Date(currentPayment.created_at), 'dd MMM', { locale: es })}
+              {format(new Date(extendedPayment.created_at), 'dd MMM', { locale: es })}
             </div>
             <p className="text-xs text-muted-foreground">
-              {format(new Date(currentPayment.created_at), 'HH:mm:ss')}
+              {format(new Date(extendedPayment.created_at), 'HH:mm:ss')}
             </p>
           </CardContent>
         </Card>
@@ -420,17 +487,17 @@ export default function TransactionDetailPage() {
           <TabsTrigger value="timeline">Línea de Tiempo</TabsTrigger>
           <TabsTrigger value="refunds">
             Reembolsos
-            {currentPayment.refunds && currentPayment.refunds.length > 0 && (
+            {extendedPayment.refunds && extendedPayment.refunds.length > 0 && (
               <Badge variant="secondary" className="ml-2">
-                {currentPayment.refunds.length}
+                {extendedPayment.refunds.length}
               </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="disputes">
             Disputas
-            {currentPayment.disputes && currentPayment.disputes.length > 0 && (
+            {extendedPayment.disputes && extendedPayment.disputes.length > 0 && (
               <Badge variant="destructive" className="ml-2">
-                {currentPayment.disputes.length}
+                {extendedPayment.disputes.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -451,52 +518,52 @@ export default function TransactionDetailPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">ID de Pago</p>
-                  <p className="font-mono text-sm">{currentPayment.payment_id}</p>
+                  <p className="font-mono text-sm">{extendedPayment.payment_id}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">ID de Comerciante</p>
-                  <p className="font-mono text-sm">{currentPayment.merchant_id}</p>
+                  <p className="font-mono text-sm">{extendedPayment.merchant_id}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Monto</p>
                   <p className="font-semibold">
-                    {formatCurrency(currentPayment.amount / 100, currentPayment.currency)}
+                    {formatCurrency(extendedPayment.amount / 100, extendedPayment.currency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Estado</p>
-                  <Badge variant={currentPayment.status === 'succeeded' ? 'success' : 'secondary'}>
+                  <Badge variant={extendedPayment.status === 'succeeded' ? 'success' : 'secondary'}>
                     {status.label}
                   </Badge>
                 </div>
-                {currentPayment.description && (
+                {extendedPayment.description && (
                   <div className="col-span-2">
                     <p className="text-sm font-medium text-muted-foreground">Descripción</p>
-                    <p className="text-sm">{currentPayment.description}</p>
+                    <p className="text-sm">{extendedPayment.description}</p>
                   </div>
                 )}
-                {currentPayment.statement_descriptor_name && (
+                {extendedPayment.statement_descriptor_name && (
                   <div className="col-span-2">
                     <p className="text-sm font-medium text-muted-foreground">Descriptor de Estado de Cuenta</p>
-                    <p className="text-sm">{currentPayment.statement_descriptor_name}</p>
+                    <p className="text-sm">{extendedPayment.statement_descriptor_name}</p>
                   </div>
                 )}
               </div>
 
               {/* Payment Method Details */}
-              {currentPayment.payment_method_data && (
+              {extendedPayment.payment_method_data && (
                 <Separator />
               )}
               
               {/* Metadata */}
-              {currentPayment.metadata && Object.keys(currentPayment.metadata).length > 0 && (
+              {extendedPayment.metadata && Object.keys(extendedPayment.metadata).length > 0 && (
                 <>
                   <Separator />
                   <div>
                     <p className="text-sm font-medium text-muted-foreground mb-2">Metadata</p>
                     <div className="bg-muted rounded-lg p-3">
                       <pre className="text-xs overflow-x-auto">
-                        {JSON.stringify(currentPayment.metadata, null, 2)}
+                        {JSON.stringify(extendedPayment.metadata, null, 2)}
                       </pre>
                     </div>
                   </div>
@@ -506,7 +573,7 @@ export default function TransactionDetailPage() {
           </Card>
 
           {/* Customer Information */}
-          {currentPayment.customer && (
+          {extendedPayment.customer && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -516,34 +583,34 @@ export default function TransactionDetailPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  {currentPayment.customer_id && (
+                  {extendedPayment.customer_id && (
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">ID de Cliente</p>
-                      <p className="font-mono text-sm">{currentPayment.customer_id}</p>
+                      <p className="font-mono text-sm">{extendedPayment.customer_id}</p>
                     </div>
                   )}
-                  {currentPayment.customer.email && (
+                  {extendedPayment.customer.email && (
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Email</p>
                       <p className="text-sm flex items-center space-x-1">
                         <Mail className="h-3 w-3" />
-                        <span>{showSensitiveData ? currentPayment.customer.email : '••••••@••••••'}</span>
+                        <span>{showSensitiveData ? extendedPayment.customer.email : '••••••@••••••'}</span>
                       </p>
                     </div>
                   )}
-                  {currentPayment.customer.phone && (
+                  {extendedPayment.customer.phone && (
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Teléfono</p>
                       <p className="text-sm flex items-center space-x-1">
                         <Phone className="h-3 w-3" />
-                        <span>{showSensitiveData ? currentPayment.customer.phone : '••••••••••'}</span>
+                        <span>{showSensitiveData ? extendedPayment.customer.phone : '••••••••••'}</span>
                       </p>
                     </div>
                   )}
-                  {currentPayment.customer.name && (
+                  {extendedPayment.customer.name && (
                     <div>
                       <p className="text-sm font-medium text-muted-foreground">Nombre</p>
-                      <p className="text-sm">{currentPayment.customer.name}</p>
+                      <p className="text-sm">{extendedPayment.customer.name}</p>
                     </div>
                   )}
                 </div>
@@ -570,8 +637,8 @@ export default function TransactionDetailPage() {
             </Card>
           )}
 
-          {/* Billing/Shipping Information */}
-          {(currentPayment.billing || currentPayment.shipping) && (
+          {/* Billing/Shipping Information - Corregida la estructura de direcciones */}
+          {(extendedPayment.billing || extendedPayment.shipping) && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
@@ -581,38 +648,36 @@ export default function TransactionDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid md:grid-cols-2 gap-6">
-                  {currentPayment.billing && (
+                  {extendedPayment.billing && (
                     <div>
                       <h4 className="font-medium mb-2">Dirección de Facturación</h4>
                       <address className="text-sm text-muted-foreground not-italic space-y-1">
-                        {currentPayment.billing.address?.line1 && <p>{currentPayment.billing.address.line1}</p>}
-                        {currentPayment.billing.address?.line2 && <p>{currentPayment.billing.address.line2}</p>}
-                        {currentPayment.billing.address?.city && (
+                        {extendedPayment.billing.address?.street && <p>{extendedPayment.billing.address.street}</p>}
+                        {extendedPayment.billing.address?.city && (
                           <p>
-                            {currentPayment.billing.address.city}
-                            {currentPayment.billing.address.state && `, ${currentPayment.billing.address.state}`}
-                            {currentPayment.billing.address.zip && ` ${currentPayment.billing.address.zip}`}
+                            {extendedPayment.billing.address.city}
+                            {extendedPayment.billing.address.state && `, ${extendedPayment.billing.address.state}`}
+                            {extendedPayment.billing.address.postal_code && ` ${extendedPayment.billing.address.postal_code}`}
                           </p>
                         )}
-                        {currentPayment.billing.address?.country && <p>{currentPayment.billing.address.country}</p>}
+                        {extendedPayment.billing.address?.country && <p>{extendedPayment.billing.address.country}</p>}
                       </address>
                     </div>
                   )}
                   
-                  {currentPayment.shipping && (
+                  {extendedPayment.shipping && (
                     <div>
                       <h4 className="font-medium mb-2">Dirección de Envío</h4>
                       <address className="text-sm text-muted-foreground not-italic space-y-1">
-                        {currentPayment.shipping.address?.line1 && <p>{currentPayment.shipping.address.line1}</p>}
-                        {currentPayment.shipping.address?.line2 && <p>{currentPayment.shipping.address.line2}</p>}
-                        {currentPayment.shipping.address?.city && (
+                        {extendedPayment.shipping.address?.street && <p>{extendedPayment.shipping.address.street}</p>}
+                        {extendedPayment.shipping.address?.city && (
                           <p>
-                            {currentPayment.shipping.address.city}
-                            {currentPayment.shipping.address.state && `, ${currentPayment.shipping.address.state}`}
-                            {currentPayment.shipping.address.zip && ` ${currentPayment.shipping.address.zip}`}
+                            {extendedPayment.shipping.address.city}
+                            {extendedPayment.shipping.address.state && `, ${extendedPayment.shipping.address.state}`}
+                            {extendedPayment.shipping.address.postal_code && ` ${extendedPayment.shipping.address.postal_code}`}
                           </p>
                         )}
-                        {currentPayment.shipping.address?.country && <p>{currentPayment.shipping.address.country}</p>}
+                        {extendedPayment.shipping.address?.country && <p>{extendedPayment.shipping.address.country}</p>}
                       </address>
                     </div>
                   )}
@@ -622,15 +687,15 @@ export default function TransactionDetailPage() {
           )}
 
           {/* Error Information */}
-          {currentPayment.error_message && (
+          {extendedPayment.error_message && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Error en el Pago</AlertTitle>
               <AlertDescription className="space-y-2">
-                <p>{currentPayment.error_message}</p>
-                {currentPayment.error_code && (
+                <p>{extendedPayment.error_message}</p>
+                {extendedPayment.error_code && (
                   <p className="text-sm">
-                    Código de error: <code className="font-mono">{currentPayment.error_code}</code>
+                    Código de error: <code className="font-mono">{extendedPayment.error_code}</code>
                   </p>
                 )}
               </AlertDescription>
@@ -689,7 +754,7 @@ export default function TransactionDetailPage() {
               <CardTitle>Historial de Reembolsos</CardTitle>
             </CardHeader>
             <CardContent>
-              {currentPayment.refunds && currentPayment.refunds.length > 0 ? (
+              {extendedPayment.refunds && extendedPayment.refunds.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -702,7 +767,7 @@ export default function TransactionDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentPayment.refunds.map((refund: any) => (
+                    {extendedPayment.refunds.map((refund: any) => (
                       <TableRow key={refund.refund_id}>
                         <TableCell className="font-mono text-sm">
                           {refund.refund_id}
@@ -735,11 +800,11 @@ export default function TransactionDetailPage() {
                 <div className="text-center py-8 text-muted-foreground">
                   <RefreshCw className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p>No hay reembolsos para esta transacción</p>
-                  {currentPayment.status === 'succeeded' && (
+                  {extendedPayment.status === 'succeeded' && (
                     <Button
                       variant="outline"
                       className="mt-4"
-                      onClick={() => router.push(`/refunds/create?payment_id=${currentPayment.payment_id}`)}
+                      onClick={() => router.push(`/refunds/create?payment_id=${extendedPayment.payment_id}`)}
                     >
                       Crear Reembolso
                     </Button>
@@ -757,7 +822,7 @@ export default function TransactionDetailPage() {
               <CardTitle>Historial de Disputas</CardTitle>
             </CardHeader>
             <CardContent>
-              {currentPayment.disputes && currentPayment.disputes.length > 0 ? (
+              {extendedPayment.disputes && extendedPayment.disputes.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -770,7 +835,7 @@ export default function TransactionDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentPayment.disputes.map((dispute: any) => (
+                    {extendedPayment.disputes.map((dispute: any) => (
                       <TableRow key={dispute.dispute_id}>
                         <TableCell className="font-mono text-sm">
                           {dispute.dispute_id}
@@ -823,7 +888,7 @@ export default function TransactionDetailPage() {
             <CardContent>
               <div className="bg-muted rounded-lg p-4 overflow-x-auto">
                 <pre className="text-xs">
-                  {JSON.stringify(currentPayment, null, 2)}
+                  {JSON.stringify(extendedPayment, null, 2)}
                 </pre>
               </div>
             </CardContent>
@@ -832,7 +897,7 @@ export default function TransactionDetailPage() {
       </Tabs>
 
       {/* Action Buttons */}
-      {currentPayment.status === 'requires_capture' && (
+      {extendedPayment.status === 'requires_capture' && (
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -843,7 +908,7 @@ export default function TransactionDetailPage() {
                 </p>
               </div>
               <Button
-                onClick={() => router.push(`/payments/${currentPayment.payment_id}/capture`)}
+                onClick={() => router.push(`/payments/${extendedPayment.payment_id}/capture`)}
               >
                 Capturar Pago
               </Button>
@@ -863,10 +928,10 @@ export default function TransactionDetailPage() {
         </Button>
         
         <div className="flex items-center space-x-2">
-          {currentPayment.status === 'succeeded' && !currentPayment.refunds?.length && (
+          {extendedPayment.status === 'succeeded' && !extendedPayment.refunds?.length && (
             <Button
               variant="outline"
-              onClick={() => router.push(`/refunds/create?payment_id=${currentPayment.payment_id}`)}
+              onClick={() => router.push(`/refunds/create?payment_id=${extendedPayment.payment_id}`)}
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               Crear Reembolso
@@ -875,10 +940,10 @@ export default function TransactionDetailPage() {
           
           <Button
             variant="outline"
-            onClick={() => window.open(`https://dashboard.hyperswitch.io/payments/${currentPayment.payment_id}`, '_blank')}
+            onClick={() => window.open(`https://dashboard.hyperswitch.io/payments/${extendedPayment.payment_id}`, '_blank')}
           >
             <ExternalLink className="mr-2 h-4 w-4" />
-            Ver en Hyperswitch
+            Ver en Multipaga
           </Button>
         </div>
       </div>

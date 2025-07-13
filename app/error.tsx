@@ -6,6 +6,15 @@ import { Button } from '@/presentation/components/ui/Button'
 import { Card } from '@/presentation/components/ui/Card'
 import { useRouter } from 'next/navigation'
 
+// Extender la interfaz Window para incluir Sentry
+declare global {
+  interface Window {
+    Sentry?: {
+      captureException: (error: Error) => void
+    }
+  }
+}
+
 export default function Error({
   error,
   reset,
@@ -83,7 +92,7 @@ export default function Error({
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button
               onClick={reset}
-              variant="primary"
+              variant="default"
               leftIcon={<RefreshCw className="w-4 h-4" />}
             >
               Try Again

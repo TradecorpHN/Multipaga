@@ -48,6 +48,9 @@ const STATUS_CONFIG = {
   requires_creation: { label: 'Requires Creation', variant: 'outline' as const, icon: AlertCircle },
   requires_fulfillment: { label: 'Requires Fulfillment', variant: 'outline' as const, icon: AlertCircle },
   requires_vendor_account_creation: { label: 'Requires Vendor Setup', variant: 'outline' as const, icon: Building },
+  ineligible: { label: 'Ineligible', variant: 'destructive' as const, icon: XCircle },
+  requires_confirmation: { label: 'Requires Confirmation', variant: 'outline' as const, icon: AlertCircle },
+  requires_payout_method_data: { label: 'Requires Method Data', variant: 'outline' as const, icon: AlertCircle },
 }
 
 const PAYOUT_TYPES = {
@@ -56,9 +59,13 @@ const PAYOUT_TYPES = {
   wallet: { label: 'Digital Wallet', icon: Send },
 }
 
+// ✅ TIPOS ESPECÍFICOS SEGÚN EL ROUTER
+type PayoutType = 'card' | 'bank' | 'wallet'
+type PayoutStatus = 'success' | 'failed' | 'cancelled' | 'initiated' | 'expired' | 'reversed' | 'pending' | 'ineligible' | 'requires_creation' | 'requires_confirmation' | 'requires_payout_method_data' | 'requires_fulfillment' | 'requires_vendor_account_creation'
+
 interface PayoutFilters {
-  payout_status?: string[]
-  payout_type?: string[]
+  payout_status?: PayoutStatus[] // ✅ CORREGIDO: Tipo específico
+  payout_type?: PayoutType[] // ✅ CORREGIDO: Tipo específico
   currency?: string[]
   amount_gte?: number
   amount_lte?: number
@@ -71,13 +78,17 @@ interface Payout {
   payout_id: string
   amount: number
   currency: string
-  payout_type: string
+  payment_method?: string
   status: string
-  created_at: string
+  created: string
   description?: string
   connector?: string
-  connector_payout_id?: string
-  customer?: { email?: string }
+  connector_transaction_id?: string
+  customer?: { 
+    customer_id?: string
+    email?: string 
+    name?: string
+  }
   customer_id?: string
 }
 
@@ -96,31 +107,52 @@ export default function PayoutsPage() {
 
   const debouncedSearch = useDebounce(searchQuery, 300)
 
-  // ⬇️ Usa trpc.payout.list y cambia a trpc.payouts.list si tu router es plural
-  const { data: payouts, isLoading, refetch } = trpc.payout.list.useQuery({
+  // ✅ CORREGIDO: Build query parameters según el router tRPC
+  const queryParams = {
     limit: pageSize,
     offset: (currentPage - 1) * pageSize,
-    ...(debouncedSearch && { payout_id: debouncedSearch, customer_id: debouncedSearch }),
-    ...(filters.payout_status && filters.payout_status.length > 0 && { payout_status: filters.payout_status }),
-    ...(filters.payout_type && filters.payout_type.length > 0 && { payout_type: filters.payout_type }),
-    ...(filters.currency && filters.currency.length > 0 && { currency: filters.currency }),
-    ...(filters.amount_gte && { amount: { gte: filters.amount_gte * 100 } }),
-    ...(filters.amount_lte && { amount: { lte: filters.amount_lte * 100 } }),
-    ...(filters.created_after && filters.created_before && {
-      created: {
-        gte: filters.created_after.toISOString(),
-        lte: filters.created_before.toISOString(),
-      },
+    ...(debouncedSearch && { 
+      payout_id: debouncedSearch, 
+      customer_id: debouncedSearch 
     }),
-  })
-  const { data: stats } = trpc.payout.stats.useQuery({
-    time_range: {
-      start_time: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      end_time: new Date().toISOString(),
-    },
+    ...(filters.payout_status && filters.payout_status.length > 0 && { 
+      payout_status: filters.payout_status 
+    }),
+    ...(filters.payout_type && filters.payout_type.length > 0 && { 
+      payout_type: filters.payout_type 
+    }),
+    ...(filters.currency && filters.currency.length > 0 && { 
+      currency: filters.currency 
+    }),
+    ...(filters.amount_gte && filters.amount_lte && {
+      amount: {
+        gte: filters.amount_gte * 100,
+        lte: filters.amount_lte * 100,
+      }
+    }),
+    // ✅ CORREGIDO: Usar created_after/created_before en lugar de created
+    ...(filters.created_after && {
+      created_after: filters.created_after.toISOString(),
+    }),
+    ...(filters.created_before && {
+      created_before: filters.created_before.toISOString(),
+    }),
+  }
+
+  // ✅ CORRECTO: Usando trpc.payouts.* con el router implementado
+  const { data: payouts, isLoading, refetch } = trpc.payouts.list.useQuery(queryParams)
+  
+  // ✅ CORREGIDO: Usar created_after/created_before en lugar de time_range
+  const { data: stats } = trpc.payouts.stats.useQuery({
+    created_after: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    created_before: new Date().toISOString(),
   })
 
-  const cancelMutation = trpc.payout.cancel.useMutation({
+  // ✅ CORREGIDO: Usar checkAvailability en lugar de isAvailable
+  const { data: availability } = trpc.payouts.checkAvailability.useQuery()
+
+  // Mutations for payout actions
+  const cancelMutation = trpc.payouts.cancel.useMutation({
     onSuccess: () => {
       toast({
         title: 'Payout Cancelled',
@@ -137,7 +169,7 @@ export default function PayoutsPage() {
     },
   })
 
-  const fulfillMutation = trpc.payout.fulfill.useMutation({
+  const fulfillMutation = trpc.payouts.fulfill.useMutation({
     onSuccess: () => {
       toast({
         title: 'Payout Fulfilled',
@@ -156,15 +188,17 @@ export default function PayoutsPage() {
 
   const handleCancelPayout = (payoutId: string) => {
     if (confirm('Are you sure you want to cancel this payout? This action may not be reversible.')) {
+      // ✅ CORREGIDO: Usar payoutId en lugar de payout_id
       cancelMutation.mutate({
-        payout_id: payoutId,
+        payoutId: payoutId,
         cancellation_reason: 'requested_by_customer',
       })
     }
   }
 
   const handleFulfillPayout = (payoutId: string) => {
-    fulfillMutation.mutate({ payout_id: payoutId })
+    // ✅ CORREGIDO: Usar payoutId en lugar de payout_id
+    fulfillMutation.mutate({ payoutId: payoutId })
   }
 
   const handleExport = () => {
@@ -179,10 +213,10 @@ export default function PayoutsPage() {
       payout.payout_id,
       formatCurrency(payout.amount, payout.currency),
       payout.currency,
-      payout.payout_type,
+      payout.payment_method || 'N/A',
       payout.status,
-      formatDate(payout.created_at),
-      payout.customer?.email || payout.customer_id || '',
+      formatDate(payout.created),
+      payout.customer?.email || payout.customer?.name || payout.customer_id || '',
     ])
     const csv = [
       headers.join(','),
@@ -223,9 +257,9 @@ export default function PayoutsPage() {
   }
 
   const filteredPayouts = payouts?.data?.filter((payout: Payout) => {
-    if (activeTab === 'pending') return ['initiated', 'pending', 'requires_fulfillment'].includes(payout.status)
+    if (activeTab === 'pending') return ['initiated', 'pending', 'requires_fulfillment', 'requires_confirmation'].includes(payout.status)
     if (activeTab === 'completed') return payout.status === 'success'
-    if (activeTab === 'failed') return ['failed', 'cancelled', 'expired'].includes(payout.status)
+    if (activeTab === 'failed') return ['failed', 'cancelled', 'expired', 'ineligible'].includes(payout.status)
     return true
   }) || []
 
@@ -250,7 +284,8 @@ export default function PayoutsPage() {
         </div>
       </div>
 
-      {stats && !stats.is_available && (
+      {/* ✅ CORREGIDO: Availability Alert */}
+      {availability && !availability.isAvailable && (
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Payouts Not Available</AlertTitle>
@@ -393,7 +428,8 @@ export default function PayoutsPage() {
                       onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
-                          payout_status: value === 'all' ? undefined : [value],
+                          // ✅ CORREGIDO: Type assertion para PayoutStatus
+                          payout_status: value === 'all' ? undefined : [value as PayoutStatus],
                         }))
                       }
                     >
@@ -417,7 +453,8 @@ export default function PayoutsPage() {
                       onValueChange={(value: string) =>
                         setFilters(prev => ({
                           ...prev,
-                          payout_type: value === 'all' ? undefined : [value],
+                          // ✅ CORREGIDO: Type assertion para PayoutType
+                          payout_type: value === 'all' ? undefined : [value as PayoutType],
                         }))
                       }
                     >
@@ -559,8 +596,8 @@ export default function PayoutsPage() {
                       </TableRow>
                     ) : (
                       filteredPayouts.map((payout: Payout) => {
-                        const typeConfig = PAYOUT_TYPES[payout.payout_type as keyof typeof PAYOUT_TYPES]
-                        const TypeIcon = typeConfig?.icon || Send
+                        const typeConfig = PAYOUT_TYPES[payout.payment_method as keyof typeof PAYOUT_TYPES] || PAYOUT_TYPES.bank
+                        const TypeIcon = typeConfig.icon
                         return (
                           <TableRow key={payout.payout_id}>
                             <TableCell>
@@ -594,7 +631,9 @@ export default function PayoutsPage() {
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="font-medium">{payout.customer?.email || payout.customer_id}</p>
+                                <p className="font-medium">
+                                  {payout.customer?.email || payout.customer?.name || payout.customer_id || 'N/A'}
+                                </p>
                                 {payout.description && (
                                   <p className="text-xs text-muted-foreground">{payout.description}</p>
                                 )}
@@ -608,7 +647,7 @@ export default function PayoutsPage() {
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <TypeIcon className="h-4 w-4 text-muted-foreground" />
-                                <span className="text-sm">{typeConfig?.label || payout.payout_type}</span>
+                                <span className="text-sm">{typeConfig.label}</span>
                               </div>
                             </TableCell>
                             <TableCell>
@@ -616,9 +655,9 @@ export default function PayoutsPage() {
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="text-sm">{formatDate(payout.created_at)}</p>
+                                <p className="text-sm">{formatDate(payout.created)}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {format(new Date(payout.created_at), 'HH:mm:ss')}
+                                  {format(new Date(payout.created), 'HH:mm:ss')}
                                 </p>
                               </div>
                             </TableCell>
@@ -653,7 +692,7 @@ export default function PayoutsPage() {
                                       Cancel Payout
                                     </DropdownMenuItem>
                                   )}
-                                  {payout.connector_payout_id && (
+                                  {payout.connector_transaction_id && (
                                     <DropdownMenuItem>
                                       <ExternalLink className="mr-2 h-4 w-4" />
                                       View in {payout.connector}
