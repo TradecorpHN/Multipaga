@@ -43,6 +43,7 @@ import {
 import { Separator } from '@/presentation/components/ui/Separator'
 import { useAuth } from '@/presentation/hooks/useAuth'
 import { useNotifications } from '@/presentation/hooks/useNotifications'
+import { formatDistanceToNow } from 'date-fns'
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -83,7 +84,7 @@ export default function Header({
   const router = useRouter()
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
-  const { user, logout, isLoading } = useAuth()
+const { merchant, logout, isLoading } = useAuth()
   const { notifications, unreadCount, markAsRead } = useNotifications()
   
   const [searchQuery, setSearchQuery] = useState('')
@@ -346,29 +347,25 @@ export default function Header({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-8 w-8">
-                  <AvatarImage 
-                    src={user?.avatar_url} 
-                    alt={user?.name || user?.email || 'Usuario'} 
-                  />
-                  <AvatarFallback>
-                    {user?.name 
-                      ? user.name.split(' ').map(n => n[0]).join('').toUpperCase()
-                      : user?.email?.[0]?.toUpperCase() || 'U'
-                    }
-                  </AvatarFallback>
-                </Avatar>
+<Avatar className="h-8 w-8">
+  <AvatarFallback>
+    {merchant?.business_profile?.profile_name 
+      ? merchant.business_profile.profile_name.split(' ').map((n: string) => n[0]).join('').toUpperCase()
+      : merchant?.merchant_id?.[0]?.toUpperCase() || 'M'
+    }
+  </AvatarFallback>
+</Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    {user?.name || 'Usuario'}
-                  </p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user?.email}
-                  </p>
+ <p className="text-sm font-medium leading-none">
+  {merchant?.business_profile?.profile_name || merchant?.merchant_id || 'Merchant'}
+</p>
+<p className="text-xs leading-none text-muted-foreground">
+  {merchant?.merchant_id}
+</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

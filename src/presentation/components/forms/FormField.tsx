@@ -19,6 +19,7 @@ import {
   CreditCard,
   Hash,
   FileText,
+  X, // CORRECCIÓN: Importar el ícono X
 } from 'lucide-react'
 import { Label } from '@/presentation/components/ui/Label'
 import { Input } from '@/presentation/components/ui/Input'
@@ -30,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/presentation/components/ui/Select'
+// CORRECCIÓN: Crear archivos Switch.tsx y RadioGroup.tsx en el directorio UI
 import { Switch } from '@/presentation/components/ui/Switch'
 import { Checkbox } from '@/presentation/components/ui/Checkbox'
 import { RadioGroup, RadioGroupItem } from '@/presentation/components/ui/RadioGroup'

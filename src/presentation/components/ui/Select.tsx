@@ -330,3 +330,22 @@ export const useMultiSelect = (initialValues: string[] = []) => {
   const selectAll = React.useCallback((values: string[]) => setSelectedValues(values), [])
   return { selectedValues, setSelectedValues, toggle, isSelected, clear, selectAll }
 }
+export const SelectWithState = React.forwardRef<
+  React.ElementRef<typeof SelectTrigger>,
+  React.ComponentPropsWithoutRef<typeof SelectTrigger> & {
+    value?: string
+    onValueChange?: (value: string) => void
+    children?: React.ReactNode
+  }
+>(({ value, onValueChange, children, ...props }, ref) => (
+  <Select value={value} onValueChange={onValueChange}>
+    <SelectTrigger ref={ref} {...props}>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      {children}
+    </SelectContent>
+  </Select>
+))
+
+SelectWithState.displayName = 'SelectWithState'

@@ -7,20 +7,15 @@ import {
   CreditCard, ShoppingBag, TrendingUp, UserCheck, UserX, ChevronLeft, ChevronRight, Copy, Edit, Ban
 } from 'lucide-react'
 
-// UI components – paths explícitos
 import { Button } from '@/presentation/components/ui/Button'
 import { Input } from '@/presentation/components/ui/Input'
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
 import { Badge } from '@/presentation/components/ui/Badge'
 import { Skeleton } from '@/presentation/components/ui/Skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/presentation/components/ui/Avatar'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/presentation/components/ui/DropdownMenu'
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/presentation/components/ui/Table'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/presentation/components/ui/DropdownMenu'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/presentation/components/ui/Select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/presentation/components/ui/Table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/presentation/components/ui/Tabs'
 import { Checkbox } from '@/presentation/components/ui/Checkbox'
 import { Label } from '@/presentation/components/ui/Label'
@@ -45,9 +40,8 @@ const USD_FORMAT: Intl.NumberFormatOptions = { style: 'currency', currency: 'USD
 
 export default function CustomersPage() {
   const router = useRouter()
-  // Si tu hook useToast retorna { toast }, usa destructuring, si no, solo haz: const toast = useToast()
-const toast = useToast() 
-  
+  // ✅ Corregir destructuring del hook useToast
+  const { toast } = useToast()
 
   const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -78,72 +72,70 @@ const toast = useToast()
   // Delete customer mutation
   const deleteMutation = trpc.customers.delete.useMutation({
     onSuccess: () => {
- toast({
-  message: 'Customer Deleted: The customer has been successfully deleted.',
-  type: 'success',
-})
+      toast({
+        title: 'Customer Deleted',
+        description: 'The customer has been successfully deleted.',
+      })
       refetch()
     },
     onError: (error: any) => {
-toast({
-  message: `Delete Failed: ${error.message}`,
-  type: 'error',
-})
+      toast({
+        title: 'Delete Failed',
+        description: error.message,
+        variant: 'destructive'
+      })
     },
   })
 
-  // Export customers mutation
-// Export customers query (SIN onSuccess/onError)
-const exportQuery = trpc.customers.export.useQuery(
-  { ...queryParams, format: 'csv' },
-  { enabled: false }
-)
-
-const handleExport = async () => {
-  try {
-    const { data } = await exportQuery.refetch()
-    if (data && data.format === 'csv') {
-      const blob = new Blob([data.data], { type: 'text/csv' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `customers-export-${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+  // ✅ Corregir export - usar useMutation en lugar de useQuery
+  const exportMutation = trpc.customers.export.useMutation({
+    onSuccess: (data) => {
+      if (data && data.format === 'csv') {
+        const blob = new Blob([data.data], { type: 'text/csv' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `customers-export-${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        toast({
+          title: 'Export Successful',
+          description: 'Your customers have been exported.',
+        })
+      } else {
+        toast({
+          title: 'No data to export',
+          variant: 'default'
+        })
+      }
+    },
+    onError: (error: any) => {
       toast({
-        message: 'Export Successful. Your customers have been exported.',
-        type: 'success',
-      })
-    } else {
-      toast({
-        message: 'No data to export.',
-        type: 'info',
+        title: 'Export Failed',
+        description: error.message,
+        variant: 'destructive'
       })
     }
-  } catch (error: any) {
-    toast({
-      message: `Export Failed: ${error.message}`,
-      type: 'error',
-    })
-  }
-}
+  })
 
+  const handleExport = async () => {
+    exportMutation.mutate({ ...queryParams, format: 'csv' })
+  }
 
   const handleDeleteCustomer = (customerId: string) => {
     if (confirm('Are you sure you want to delete this customer? This action cannot be undone.')) {
       deleteMutation.mutate({ customerId })
-
     }
   }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-toast({
-  message: 'Copied to clipboard. The information has been copied.',
-  type: 'info',
-})
+    toast({
+      title: 'Copied to clipboard',
+      description: 'The information has been copied.',
+    })
   }
 
   const getInitials = (name?: string, email?: string) => {
@@ -288,9 +280,9 @@ toast({
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Actions</DropdownMenuLabel>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleExport}>
+                      <DropdownMenuItem onClick={handleExport} disabled={exportMutation.isPending}>
                         <Download className="mr-2 h-4 w-4" />
-                        Export to CSV
+                        {exportMutation.isPending ? 'Exporting...' : 'Export to CSV'}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -427,7 +419,7 @@ toast({
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={customer.payments_count > 0 ? 'success' : 'secondary'}>
+                            <Badge variant={customer.payments_count > 0 ? 'default' : 'secondary'}>
                               {customer.payments_count > 0 ? 'Active' : 'Inactive'}
                             </Badge>
                           </TableCell>

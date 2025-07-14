@@ -4,7 +4,7 @@ import { useRef, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Points, PointMaterial } from '@react-three/drei'
 import * as THREE from 'three'
-import * as random from 'maath/random/dist/maath-random.esm'
+import { random } from 'maath'
 
 interface StarsFieldProps {
   count?: number

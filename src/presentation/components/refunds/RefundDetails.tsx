@@ -33,7 +33,6 @@ import {
   MessageSquare,
   Flag,
   MoreHorizontal,
-  Print,
   Share,
   Eye,
   Zap,

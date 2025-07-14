@@ -1,467 +1,636 @@
-// ==============================================================================
-// refund.schema.ts - Esquemas de validación para reembolsos
-// ==============================================================================
+'use client'
 
-// /home/kali/multipaga/src/presentation/components/forms/validation/refund.schema.ts
-import { z } from 'zod'
-import { REGEX_PATTERNS } from '@/presentation/lib/constants'
+import React, { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 
-/**
- * Esquema de validación para crear un reembolso
- */
-export const createRefundSchema = z.object({
-  payment_id: z
-    .string()
-    .min(1, 'Payment ID is required')
-    .regex(REGEX_PATTERNS.PAYMENT_ID, 'Invalid payment ID format')
-    .trim(),
-  
-  amount: z
-    .number()
-    .min(1, 'Amount must be at least 1 cent')
-    .max(999999999, 'Amount cannot exceed $9,999,999.99')
-    .or(z.string().regex(/^\d+$/, 'Amount must be a valid number').transform(Number))
-    .refine(val => val > 0, 'Amount must be greater than 0'),
-  
-  currency: z
-    .string()
-    .length(3, 'Currency must be a 3-letter ISO code')
-    .toUpperCase()
-    .refine(currency => 
-      ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'BGN', 'RON', 'HRK', 'RSD', 'MKD', 'BAM', 'ALL', 'TRY', 'UAH', 'BYN', 'RUB', 'KZT', 'UZS', 'KGS', 'TJS', 'AZN', 'GEL', 'AMD', 'TMT', 'AFN', 'PKR', 'INR', 'NPR', 'LKR', 'BDT', 'BTN', 'MVR', 'MMK', 'LAK', 'KHR', 'VND', 'THB', 'IDR', 'PHP', 'MYR', 'SGD', 'BND', 'CNY', 'HKD', 'MOP', 'TWD', 'KRW', 'MNT', 'KPW'].includes(currency),
-      'Unsupported currency'
-    ),
-  
-  reason: z
-    .enum([
-      'duplicate',
-      'fraudulent', 
-      'requested_by_customer',
-      'seller_error',
-      'product_not_received',
-      'product_unacceptable',
-      'processing_error',
-      'credit_not_processed',
-      'general',
-      'merchant_decision'
-    ])
-    .default('requested_by_customer'),
-  
-  metadata: z
-    .record(z.string(), z.any())
-    .optional()
-    .nullable()
-    .refine(metadata => {
-      if (!metadata) return true
-      const keys = Object.keys(metadata)
-      return keys.length <= 50 && keys.every(key => key.length <= 40)
-    }, 'Metadata can have max 50 keys, each key max 40 characters'),
-  
-  notes: z
-    .string()
-    .max(500, 'Notes cannot exceed 500 characters')
-    .optional()
-    .nullable()
-    .transform(val => val === '' ? null : val),
-  
-  merchant_refund_id: z
-    .string()
-    .max(128, 'Merchant refund ID cannot exceed 128 characters')
-    .optional()
-    .nullable()
-    .transform(val => val === '' ? null : val),
-})
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/presentation/components/ui/Card'
+import { Button } from '@/presentation/components/ui/Button'
+import { Input } from '@/presentation/components/ui/Input'
+import { Badge } from '@/presentation/components/ui/Badge'
+import { Skeleton } from '@/presentation/components/ui/Skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/presentation/components/ui/Select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/presentation/components/ui/Table'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/presentation/components/ui/DropdownMenu'
+import { Checkbox } from '@/presentation/components/ui/Checkbox'
+import { Alert, AlertDescription } from '@/presentation/components/ui/Alert'
+import { formatCurrency, formatDate } from '@/presentation/components/ui/formatters'
+import { cn } from '@/presentation/lib/utils'
+import { useToast } from '@/presentation/components/ui/use-toast'
 
-/**
- * Esquema de validación para búsqueda/filtrado de reembolsos
- */
-export const refundFiltersSchema = z.object({
-  payment_id: z
-    .string()
-    .optional()
-    .nullable()
-    .transform(val => val === '' ? null : val),
-  
-  refund_id: z
-    .string()
-    .optional()
-    .nullable()
-    .transform(val => val === '' ? null : val),
-  
-  status: z
-    .array(z.enum([
-      'succeeded',
-      'failed', 
-      'pending',
-      'cancelled',
-      'requires_merchant_action',
-      'manual_review'
-    ]))
-    .optional()
-    .nullable(),
-  
-  currency: z
-    .array(z.string().length(3))
-    .optional()
-    .nullable(),
-  
-  amount_gte: z
-    .number()
-    .min(0, 'Minimum amount must be 0 or greater')
-    .optional()
-    .nullable(),
-  
-  amount_lte: z
-    .number()
-    .min(0, 'Maximum amount must be 0 or greater')
-    .optional()
-    .nullable(),
-  
-  reason: z
-    .array(z.enum([
-      'duplicate',
-      'fraudulent',
-      'requested_by_customer',
-      'seller_error',
-      'product_not_received',
-      'product_unacceptable',
-      'processing_error',
-      'credit_not_processed',
-      'general',
-      'merchant_decision'
-    ]))
-    .optional()
-    .nullable(),
-  
-  created_gte: z
-    .date()
-    .optional()
-    .nullable(),
-  
-  created_lte: z
-    .date()
-    .optional()
-    .nullable(),
-  
-  search: z
-    .string()
-    .max(200, 'Search term cannot exceed 200 characters')
-    .optional()
-    .nullable()
-    .transform(val => val === '' ? null : val),
-  
-  limit: z
-    .number()
-    .min(1, 'Limit must be at least 1')
-    .max(100, 'Limit cannot exceed 100')
-    .default(20),
-  
-  offset: z
-    .number()
-    .min(0, 'Offset must be 0 or greater')
-    .default(0),
-}).refine(data => {
-  if (data.amount_gte !== null && data.amount_lte !== null) {
-    return data.amount_gte <= data.amount_lte
-  }
-  return true
-}, {
-  message: 'Minimum amount must be less than or equal to maximum amount',
-  path: ['amount_gte']
-}).refine(data => {
-  if (data.created_gte && data.created_lte) {
-    return data.created_gte <= data.created_lte
-  }
-  return true
-}, {
-  message: 'Start date must be before or equal to end date',
-  path: ['created_gte']
-})
+import {
+  AlertTriangle,
+  Search,
+  Filter,
+  RefreshCw,
+  MoreHorizontal,
+  Eye,
+  Download,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  Shield,
+  Copy,
+  TrendingUp,
+  TrendingDown
+} from 'lucide-react'
 
-/**
- * Esquema de validación para actualizar un reembolso
- */
-export const updateRefundSchema = z.object({
-  refund_id: z
-    .string()
-    .min(1, 'Refund ID is required')
-    .regex(REGEX_PATTERNS.REFUND_ID, 'Invalid refund ID format'),
-  
-  metadata: z
-    .record(z.string(), z.any())
-    .optional()
-    .nullable()
-    .refine(metadata => {
-      if (!metadata) return true
-      const keys = Object.keys(metadata)
-      return keys.length <= 50 && keys.every(key => key.length <= 40)
-    }, 'Metadata can have max 50 keys, each key max 40 characters'),
-  
-  notes: z
-    .string()
-    .max(500, 'Notes cannot exceed 500 characters')
-    .optional()
-    .nullable()
-    .transform(val => val === '' ? null : val),
-})
-
-/**
- * Esquema de validación para reembolso masivo
- */
-export const bulkRefundSchema = z.object({
-  payment_ids: z
-    .array(z.string().regex(REGEX_PATTERNS.PAYMENT_ID, 'Invalid payment ID format'))
-    .min(1, 'At least one payment ID is required')
-    .max(100, 'Cannot process more than 100 refunds at once'),
-  
-  reason: z
-    .enum([
-      'duplicate',
-      'fraudulent',
-      'requested_by_customer', 
-      'seller_error',
-      'product_not_received',
-      'product_unacceptable',
-      'processing_error',
-      'credit_not_processed',
-      'general',
-      'merchant_decision'
-    ])
-    .default('merchant_decision'),
-  
-  refund_type: z
-    .enum(['full', 'partial'])
-    .default('full'),
-  
-  partial_amount: z
-    .number()
-    .min(1, 'Partial amount must be at least 1 cent')
-    .optional()
-    .nullable(),
-  
-  metadata: z
-    .record(z.string(), z.any())
-    .optional()
-    .nullable(),
-  
-  notes: z
-    .string()
-    .max(500, 'Notes cannot exceed 500 characters')
-    .optional()
-    .nullable()
-    .transform(val => val === '' ? null : val),
-}).refine(data => {
-  if (data.refund_type === 'partial') {
-    return data.partial_amount !== null && data.partial_amount !== undefined
-  }
-  return true
-}, {
-  message: 'Partial amount is required for partial refunds',
-  path: ['partial_amount']
-})
-
-/**
- * Esquema de validación para configuración de reembolsos automáticos
- */
-export const autoRefundConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  
-  triggers: z.object({
-    failed_payments: z.boolean().default(false),
-    duplicate_payments: z.boolean().default(false),
-    disputed_payments: z.boolean().default(false),
-    cancelled_orders: z.boolean().default(false),
-  }).default({}),
-  
-  conditions: z.object({
-    max_amount: z
-      .number()
-      .min(0, 'Maximum amount must be 0 or greater')
-      .max(999999999, 'Maximum amount cannot exceed $9,999,999.99')
-      .optional()
-      .nullable(),
-    
-    min_amount: z
-      .number()
-      .min(0, 'Minimum amount must be 0 or greater')
-      .optional()
-      .nullable(),
-    
-    age_limit_hours: z
-      .number()
-      .min(1, 'Age limit must be at least 1 hour')
-      .max(8760, 'Age limit cannot exceed 1 year')
-      .default(24),
-    
-    allowed_currencies: z
-      .array(z.string().length(3))
-      .min(1, 'At least one currency must be allowed')
-      .default(['USD']),
-  }).default({}),
-  
-  notifications: z.object({
-    email_alerts: z.boolean().default(true),
-    webhook_notifications: z.boolean().default(true),
-    slack_notifications: z.boolean().default(false),
-  }).default({}),
-  
-  approval: z.object({
-    require_manual_approval: z.boolean().default(true),
-    auto_approve_under_amount: z
-      .number()
-      .min(0, 'Auto-approve amount must be 0 or greater')
-      .max(10000, 'Auto-approve amount cannot exceed $100.00')
-      .default(1000), // $10.00 in cents
-    
-    approval_timeout_hours: z
-      .number()
-      .min(1, 'Approval timeout must be at least 1 hour')
-      .max(168, 'Approval timeout cannot exceed 1 week')
-      .default(24),
-  }).default({}),
-}).refine(data => {
-  if (data.conditions.min_amount !== null && data.conditions.max_amount !== null) {
-    return data.conditions.min_amount <= data.conditions.max_amount
-  }
-  return true
-}, {
-  message: 'Minimum amount must be less than or equal to maximum amount',
-  path: ['conditions', 'min_amount']
-})
-
-// Tipos TypeScript inferidos de los esquemas
-export type CreateRefundFormData = z.infer<typeof createRefundSchema>
-export type RefundFiltersFormData = z.infer<typeof refundFiltersSchema>
-export type UpdateRefundFormData = z.infer<typeof updateRefundSchema>
-export type BulkRefundFormData = z.infer<typeof bulkRefundSchema>
-export type AutoRefundConfigFormData = z.infer<typeof autoRefundConfigSchema>
-
-// Valores por defecto para formularios
-export const DEFAULT_CREATE_REFUND_VALUES: CreateRefundFormData = {
-  payment_id: '',
-  amount: 0,
-  currency: 'USD',
-  reason: 'requested_by_customer',
-  metadata: null,
-  notes: null,
-  merchant_refund_id: null,
+// Tipos para disputas
+interface DisputeResponse {
+  dispute_id: string
+  payment_id: string
+  attempt_id: string
+  amount: string
+  currency: string
+  dispute_stage: 'pre_dispute' | 'dispute' | 'pre_arbitration'
+  dispute_status: 'dispute_opened' | 'dispute_expired' | 'dispute_accepted' | 'dispute_cancelled' | 'dispute_challenged' | 'dispute_won' | 'dispute_lost'
+  connector: string
+  connector_status: string
+  connector_dispute_id: string
+  connector_reason?: string
+  connector_reason_code?: string
+  challenge_required_by?: string
+  connector_created_at?: string
+  connector_updated_at?: string
+  created_at: string
+  profile_id?: string
+  merchant_connector_id?: string
 }
 
-export const DEFAULT_REFUND_FILTERS_VALUES: RefundFiltersFormData = {
-  payment_id: null,
-  refund_id: null,
-  status: null,
-  currency: null,
-  amount_gte: null,
-  amount_lte: null,
-  reason: null,
-  created_gte: null,
-  created_lte: null,
-  search: null,
-  limit: 20,
-  offset: 0,
+interface DisputeFilters {
+  status?: string[]
+  stage?: string[]
+  connector?: string[]
+  amount_gte?: number
+  amount_lte?: number
+  currency?: string[]
+  date_from?: Date
+  date_to?: Date
+  payment_id?: string
+  search?: string
 }
 
-export const DEFAULT_BULK_REFUND_VALUES: BulkRefundFormData = {
-  payment_ids: [],
-  reason: 'merchant_decision',
-  refund_type: 'full',
-  partial_amount: null,
-  metadata: null,
-  notes: null,
+interface DisputeListProps {
+  disputes: DisputeResponse[]
+  totalCount: number
+  hasMore: boolean
+  isLoading?: boolean
+  error?: string | null
+  filters?: DisputeFilters
+  onFiltersChange?: (filters: DisputeFilters) => void
+  onRefresh?: () => void
+  onLoadMore?: () => void
+  onDisputeClick?: (dispute: DisputeResponse) => void
+  className?: string
 }
 
-export const DEFAULT_AUTO_REFUND_CONFIG_VALUES: AutoRefundConfigFormData = {
-  enabled: false,
-  triggers: {
-    failed_payments: false,
-    duplicate_payments: false,
-    disputed_payments: false,
-    cancelled_orders: false,
-  },
-  conditions: {
-    max_amount: null,
-    min_amount: null,
-    age_limit_hours: 24,
-    allowed_currencies: ['USD'],
-  },
-  notifications: {
-    email_alerts: true,
-    webhook_notifications: true,
-    slack_notifications: false,
-  },
-  approval: {
-    require_manual_approval: true,
-    auto_approve_under_amount: 1000,
-    approval_timeout_hours: 24,
-  },
-}
-
-// Funciones de validación adicionales
-export const validateRefundAmount = (amount: number, maxAmount: number): boolean => {
-  return amount > 0 && amount <= maxAmount
-}
-
-export const validateCurrency = (currency: string): boolean => {
-  const supportedCurrencies = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'SEK', 'NOK', 'DKK']
-  return supportedCurrencies.includes(currency.toUpperCase())
-}
-
-export const validatePaymentIdFormat = (paymentId: string): boolean => {
-  return REGEX_PATTERNS.PAYMENT_ID.test(paymentId)
-}
-
-export const formatRefundReason = (reason: string): string => {
-  return reason
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
-}
-
-// Mapeo de razones de reembolso a descripciones
-export const REFUND_REASON_DESCRIPTIONS = {
-  duplicate: 'Payment was processed more than once',
-  fraudulent: 'Payment was fraudulent',
-  requested_by_customer: 'Customer requested a refund',
-  seller_error: 'Merchant made an error',
-  product_not_received: 'Customer did not receive the product',
-  product_unacceptable: 'Product was not as described',
-  processing_error: 'Error during payment processing',
-  credit_not_processed: 'Credit was not processed correctly',
-  general: 'General refund reason',
-  merchant_decision: 'Merchant decided to issue refund',
-} as const
-
-// Configuración de estados de reembolso
-export const REFUND_STATUS_CONFIG = {
-  succeeded: {
-    label: 'Succeeded',
-    variant: 'success' as const,
-    description: 'Refund was successfully processed'
-  },
-  failed: {
-    label: 'Failed', 
+// Configuración de estados
+const DISPUTE_STATUS_CONFIG = {
+  dispute_opened: {
+    label: 'Opened',
     variant: 'destructive' as const,
-    description: 'Refund processing failed'
+    icon: AlertTriangle,
+    color: 'text-red-400'
   },
-  pending: {
-    label: 'Pending',
-    variant: 'warning' as const,
-    description: 'Refund is being processed'
+  dispute_expired: {
+    label: 'Expired',
+    variant: 'secondary' as const,
+    icon: Clock,
+    color: 'text-gray-400'
   },
-  cancelled: {
+  dispute_accepted: {
+    label: 'Accepted',
+    variant: 'secondary' as const,
+    icon: CheckCircle,
+    color: 'text-blue-400'
+  },
+  dispute_cancelled: {
     label: 'Cancelled',
     variant: 'secondary' as const,
-    description: 'Refund was cancelled'
+    icon: XCircle,
+    color: 'text-gray-400'
   },
-  requires_merchant_action: {
-    label: 'Requires Action',
+  dispute_challenged: {
+    label: 'Challenged',
     variant: 'warning' as const,
-    description: 'Merchant action required'
+    icon: Shield,
+    color: 'text-yellow-400'
   },
-  manual_review: {
-    label: 'Manual Review',
-    variant: 'warning' as const,
-    description: 'Refund requires manual review'
+  dispute_won: {
+    label: 'Won',
+    variant: 'success' as const,
+    icon: CheckCircle,
+    color: 'text-green-400'
   },
-} 
+  dispute_lost: {
+    label: 'Lost',
+    variant: 'destructive' as const,
+    icon: XCircle,
+    color: 'text-red-400'
+  },
+}
+
+const DISPUTE_STAGE_CONFIG = {
+  pre_dispute: { label: 'Pre-Dispute', color: 'text-yellow-400' },
+  dispute: { label: 'Dispute', color: 'text-orange-400' },
+  pre_arbitration: { label: 'Pre-Arbitration', color: 'text-red-400' },
+}
+
+// Función para copiar al portapapeles
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+export function DisputeList({
+  disputes,
+  totalCount,
+  hasMore,
+  isLoading = false,
+  error = null,
+  filters = {},
+  onFiltersChange,
+  onRefresh,
+  onLoadMore,
+  onDisputeClick,
+  className
+}: DisputeListProps) {
+  const router = useRouter()
+  // CORRECCIÓN: Usar la desestructuración correcta del hook useToast
+  const { toast } = useToast()
+  const [selectedDisputes, setSelectedDisputes] = useState<string[]>([])
+  const [sortBy, setSortBy] = useState<'created_at' | 'amount' | 'status'>('created_at')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+  // Ordenar disputas
+  const sortedDisputes = useMemo(() => {
+    return [...disputes].sort((a, b) => {
+      let aVal: any, bVal: any
+
+      switch (sortBy) {
+        case 'amount':
+          aVal = parseInt(a.amount)
+          bVal = parseInt(b.amount)
+          break
+        case 'status':
+          aVal = a.dispute_status
+          bVal = b.dispute_status
+          break
+        case 'created_at':
+        default:
+          aVal = new Date(a.created_at).getTime()
+          bVal = new Date(b.created_at).getTime()
+          break
+      }
+
+      if (sortOrder === 'asc') {
+        return aVal < bVal ? -1 : aVal > bVal ? 1 : 0
+      } else {
+        return aVal > bVal ? -1 : aVal < bVal ? 1 : 0
+      }
+    })
+  }, [disputes, sortBy, sortOrder])
+
+  // Handlers
+  const handleSort = (field: 'created_at' | 'amount' | 'status') => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(field)
+      setSortOrder('desc')
+    }
+  }
+
+  const handleSelectDispute = (disputeId: string, checked: boolean | "indeterminate") => {
+    if (checked === true) {
+      setSelectedDisputes(prev => [...prev, disputeId])
+    } else {
+      setSelectedDisputes(prev => prev.filter(id => id !== disputeId))
+    }
+  }
+
+  const handleSelectAll = (checked: boolean | "indeterminate") => {
+    setSelectedDisputes(
+      checked === true ? disputes.map(d => d.dispute_id) : []
+    )
+  }
+
+  const handleCopy = async (text: string, label: string) => {
+    const success = await copyToClipboard(text)
+    if (success) {
+      toast({
+        title: "Success",
+        description: `${label} copied to clipboard`
+      })
+    }
+  }
+
+  const handleDisputeClick = (dispute: DisputeResponse) => {
+    if (onDisputeClick) {
+      onDisputeClick(dispute)
+    } else {
+      router.push(`/disputes/${dispute.dispute_id}`)
+    }
+  }
+
+  // Estadísticas resumidas
+  const stats = useMemo(() => {
+    const total = disputes.length
+    const opened = disputes.filter(d => d.dispute_status === 'dispute_opened').length
+    const won = disputes.filter(d => d.dispute_status === 'dispute_won').length
+    const lost = disputes.filter(d => d.dispute_status === 'dispute_lost').length
+    const totalAmount = disputes.reduce((sum, d) => sum + parseInt(d.amount), 0)
+
+    return { total, opened, won, lost, totalAmount }
+  }, [disputes])
+
+  return (
+    <div className={cn('space-y-6', className)}>
+      {/* Header con estadísticas */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-gray-400" />
+              <div>
+                <p className="text-sm text-gray-500">Total Disputes</p>
+                <p className="text-2xl font-bold">{stats.total}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <Clock className="w-5 h-5 text-red-400" />
+              <div>
+                <p className="text-sm text-gray-500">Opened</p>
+                <p className="text-2xl font-bold text-red-400">{stats.opened}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="w-5 h-5 text-green-400" />
+              <div>
+                <p className="text-sm text-gray-500">Won</p>
+                <p className="text-2xl font-bold text-green-400">{stats.won}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-2">
+              <TrendingDown className="w-5 h-5 text-red-400" />
+              <div>
+                <p className="text-sm text-gray-500">Lost</p>
+                <p className="text-2xl font-bold text-red-400">{stats.lost}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filtros y acciones */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            <div>
+              <CardTitle className="flex items-center space-x-2">
+                <AlertTriangle className="w-5 h-5" />
+                <span>Disputes</span>
+                <Badge variant="secondary">{totalCount.toLocaleString()}</Badge>
+              </CardTitle>
+              <CardDescription>
+                Manage and track payment disputes
+              </CardDescription>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRefresh}
+                disabled={isLoading}
+              >
+                <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
+                Refresh
+              </Button>
+              <Button variant="outline" size="sm">
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Barra de búsqueda y filtros */}
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex-1">
+              <Input
+                placeholder="Search disputes by ID, payment ID, or reason..."
+                value={filters.search || ''}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => onFiltersChange?.({ ...filters, search: e.target.value })}
+                className="w-full"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Select
+                value={filters.status?.[0] || 'all'}
+                onValueChange={(value: string) =>
+                  onFiltersChange?.({
+                    ...filters,
+                    status: value === 'all' ? undefined : [value]
+                  })
+                }
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  {Object.entries(DISPUTE_STATUS_CONFIG).map(([status, config]) => (
+                    <SelectItem key={status} value={status}>
+                      {config.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={filters.stage?.[0] || 'all'}
+                onValueChange={(value: string) =>
+                  onFiltersChange?.({
+                    ...filters,
+                    stage: value === 'all' ? undefined : [value]
+                  })
+                }
+              >
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Stages</SelectItem>
+                  {Object.entries(DISPUTE_STAGE_CONFIG).map(([stage, config]) => (
+                    <SelectItem key={stage} value={stage}>
+                      {config.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm">
+                <Filter className="w-4 h-4 mr-2" />
+                More Filters
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Error state */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="w-4 h-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Tabla de disputas */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedDisputes.length === disputes.length && disputes.length > 0}
+                      indeterminate={selectedDisputes.length > 0 && selectedDisputes.length < disputes.length}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleSort('created_at')}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Dispute
+                      <ArrowUpDown className="w-4 h-4 ml-1" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>Payment</TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleSort('amount')}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Amount
+                      <ArrowUpDown className="w-4 h-4 ml-1" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleSort('status')}
+                      className="h-auto p-0 font-medium"
+                    >
+                      Status
+                      <ArrowUpDown className="w-4 h-4 ml-1" />
+                    </Button>
+                  </TableHead>
+                  <TableHead>Connector</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  [...Array(5)].map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell colSpan={8}>
+                        <Skeleton className="h-12 w-full" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : sortedDisputes.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      <AlertTriangle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No disputes found</p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sortedDisputes.map((dispute) => {
+                    const statusConfig = DISPUTE_STATUS_CONFIG[dispute.dispute_status]
+                    const stageConfig = DISPUTE_STAGE_CONFIG[dispute.dispute_stage]
+                    const StatusIcon = statusConfig.icon
+
+                    return (
+                      <TableRow
+                        key={dispute.dispute_id}
+                        className="cursor-pointer hover:bg-gray-50/5"
+                        onClick={() => handleDisputeClick(dispute)}
+                      >
+                        <TableCell onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedDisputes.includes(dispute.dispute_id)}
+                            onCheckedChange={(checked) =>
+                              handleSelectDispute(dispute.dispute_id, checked)
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-mono text-sm">{dispute.dispute_id}</p>
+                            <Badge variant="outline" className={cn('text-xs', stageConfig.color)}>
+                              {stageConfig.label}
+                            </Badge>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-mono text-sm">{dispute.payment_id}</p>
+                            {dispute.connector_reason && (
+                              <p className="text-xs text-gray-500 max-w-[200px] truncate">
+                                {dispute.connector_reason}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium">
+                              {formatCurrency(parseInt(dispute.amount), { currency: dispute.currency })}
+                            </p>
+                            <p className="text-xs text-gray-500">{dispute.currency}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={statusConfig.variant} className="flex items-center space-x-1 w-fit">
+                            <StatusIcon className="w-3 h-3" />
+                            <span>{statusConfig.label}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <p className="font-medium capitalize">{dispute.connector}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="text-sm">{formatDate(dispute.created_at)}</p>
+                            {dispute.challenge_required_by && (
+                              <p className="text-xs text-yellow-500">
+                                Challenge by {formatDate(dispute.challenge_required_by)}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => handleDisputeClick(dispute)}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleCopy(dispute.dispute_id, 'Dispute ID')}
+                              >
+                                <Copy className="w-4 h-4 mr-2" />
+                                Copy Dispute ID
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleCopy(dispute.payment_id, 'Payment ID')}
+                              >
+                                <Copy className="w-4 h-4 mr-2" />
+                                Copy Payment ID
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem>
+                                <FileText className="w-4 h-4 mr-2" />
+                                View Evidence
+                              </DropdownMenuItem>
+                              {dispute.dispute_status === 'dispute_opened' && (
+                                <>
+                                  <DropdownMenuItem>
+                                    <Shield className="w-4 h-4 mr-2" />
+                                    Challenge Dispute
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    Accept Dispute
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+        {/* Paginación */}
+        {hasMore && (
+          <CardContent className="border-t border-gray-200/20">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-500">
+                Showing {disputes.length} of {totalCount.toLocaleString()} disputes
+              </p>
+              <Button variant="outline" onClick={onLoadMore} disabled={isLoading}>
+                {isLoading ? (
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 mr-2" />
+                )}
+                Load More
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    </div>
+  )
+}

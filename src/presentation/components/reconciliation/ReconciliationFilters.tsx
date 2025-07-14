@@ -40,8 +40,7 @@ import {
   SelectContent, 
   SelectItem, 
   SelectTrigger, 
-  SelectValue,
-  SelectWithState 
+  SelectValue
 } from '@/presentation/components/ui/Select'
 import { Checkbox } from '@/presentation/components/ui/Checkbox'
 import { Label } from '@/presentation/components/ui/Label'
@@ -211,6 +210,80 @@ const DATE_RANGES = [
   { label: 'Mes anterior', value: 'lastMonth' },
   { label: 'Personalizado', value: 'custom' },
 ]
+
+// Componente helper para Select múltiple simple
+interface MultiSelectProps {
+  label: string
+  placeholder: string
+  options: Array<{ value: string; label: string }>
+  values: string[]
+  onValuesChange: (values: string[]) => void
+  disabled?: boolean
+}
+
+const MultiSelect: React.FC<MultiSelectProps> = ({
+  label,
+  placeholder,
+  options,
+  values,
+  onValuesChange,
+  disabled = false
+}) => {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const toggleValue = (value: string) => {
+    const newValues = values.includes(value)
+      ? values.filter(v => v !== value)
+      : [...values, value]
+    onValuesChange(newValues)
+  }
+
+  const selectedLabels = values
+    .map(val => options.find(opt => opt.value === val)?.label)
+    .filter(Boolean)
+
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between"
+            disabled={disabled}
+          >
+            <span className="truncate">
+              {values.length === 0 
+                ? placeholder 
+                : values.length === 1 
+                ? selectedLabels[0]
+                : `${values.length} seleccionados`
+              }
+            </span>
+            <ChevronDown className="h-4 w-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-full p-0" align="start">
+          <div className="max-h-60 overflow-auto p-1">
+            {options.map((option) => (
+              <div
+                key={option.value}
+                className="flex items-center space-x-2 p-2 hover:bg-accent rounded-sm cursor-pointer"
+                onClick={() => toggleValue(option.value)}
+              >
+<Checkbox
+  checked={values.includes(option.value)}
+  onCheckedChange={() => {}} // No-op since click is handled by parent div
+/>
+                <span className="text-sm">{option.label}</span>
+              </div>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
 
 // Componente principal
 const ReconciliationFilters = React.forwardRef<HTMLDivElement, ReconciliationFiltersProps>(({
@@ -623,39 +696,36 @@ const ReconciliationFilters = React.forwardRef<HTMLDivElement, ReconciliationFil
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Conectores */}
                 {availableConnectors.length > 0 && (
-                  <SelectWithState
+                  <MultiSelect
                     label="Conectores"
                     placeholder="Seleccionar conectores"
                     options={availableConnectors}
-                    value=""
-                    searchable
-                    multiple
+                    values={filters.connectors || []}
+                    onValuesChange={(values) => updateFilters({ connectors: values.length ? values : undefined })}
                     disabled={disabled}
                   />
                 )}
                 
                 {/* Monedas */}
                 {availableCurrencies.length > 0 && (
-                  <SelectWithState
+                  <MultiSelect
                     label="Monedas"
                     placeholder="Seleccionar monedas"
                     options={availableCurrencies}
-                    value=""
-                    searchable
-                    multiple
+                    values={filters.currencies || []}
+                    onValuesChange={(values) => updateFilters({ currencies: values.length ? values : undefined })}
                     disabled={disabled}
                   />
                 )}
                 
                 {/* Métodos de pago */}
                 {availablePaymentMethods.length > 0 && (
-                  <SelectWithState
+                  <MultiSelect
                     label="Métodos de Pago"
                     placeholder="Seleccionar métodos"
                     options={availablePaymentMethods}
-                    value=""
-                    searchable
-                    multiple
+                    values={filters.paymentMethods || []}
+                    onValuesChange={(values) => updateFilters({ paymentMethods: values.length ? values : undefined })}
                     disabled={disabled}
                   />
                 )}
@@ -679,15 +749,24 @@ const ReconciliationFilters = React.forwardRef<HTMLDivElement, ReconciliationFil
                     onChange={(e) => updateAmountRange('max', e.target.value)}
                     disabled={disabled}
                   />
-                  <SelectWithState
-                    placeholder="Moneda"
-                    options={availableCurrencies}
+                  <Select
                     value={filters.amountRange?.currency || ''}
-                    onValueChange={(currency) => updateFilters({
+                    onValueChange={(currency: string) => updateFilters({
                       amountRange: { ...filters.amountRange, currency }
                     })}
                     disabled={disabled}
-                  />
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Moneda" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableCurrencies.map((currency: { value: string; label: string }) => (
+                        <SelectItem key={currency.value} value={currency.value}>
+                          {currency.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               

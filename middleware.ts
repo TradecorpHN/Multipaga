@@ -1,6 +1,9 @@
+// middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { RateLimiterMemory } from 'rate-limiter-flexible'
+
+// ✅ Forzar Node.js runtime para compatibilidad
+export const runtime = 'nodejs'
 
 // Auth cookie key
 const AUTH_COOKIE_KEY = 'hyperswitch_auth'
@@ -11,12 +14,48 @@ const PUBLIC_ROUTES = ['/login', '/api/health', '/api/auth/login']
 // API routes
 const API_ROUTES_PREFIX = '/api/'
 
-// Create rate limiter instance
-const rateLimiter = new RateLimiterMemory({
-  points: 100, // Number of requests
-  duration: 900, // Per 15 minutes
-  blockDuration: 300, // Block for 5 minutes
-})
+// Simple in-memory rate limiter compatible con TypeScript
+class SimpleRateLimiter {
+  private requests = new Map<string, { count: number; resetTime: number }>()
+  
+  constructor(
+    private maxRequests = 100,
+    private windowMs = 15 * 60 * 1000 // 15 minutes
+  ) {}
+
+  async checkLimit(key: string): Promise<boolean> {
+    const now = Date.now()
+    const record = this.requests.get(key)
+
+    if (!record || now > record.resetTime) {
+      // New window or first request
+      this.requests.set(key, {
+        count: 1,
+        resetTime: now + this.windowMs
+      })
+      return true
+    }
+
+    if (record.count >= this.maxRequests) {
+      return false // Rate limit exceeded
+    }
+
+    record.count++
+    return true
+  }
+
+  cleanup() {
+    const now = Date.now()
+    // ✅ Usar forEach en lugar de for...of para evitar el error de iteración
+    this.requests.forEach((record, key) => {
+      if (now > record.resetTime) {
+        this.requests.delete(key)
+      }
+    })
+  }
+}
+
+const rateLimiter = new SimpleRateLimiter()
 
 // Helper to get client IP
 function getClientIp(request: NextRequest): string {
@@ -42,10 +81,14 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith(API_ROUTES_PREFIX)) {
     const clientIp = getClientIp(request)
     
-    try {
-      await rateLimiter.consume(clientIp)
-    } catch (error) {
-      // Rate limit exceeded
+    // Clean up old entries periodically
+    if (Math.random() < 0.01) { // 1% chance
+      rateLimiter.cleanup()
+    }
+    
+    const isAllowed = await rateLimiter.checkLimit(clientIp)
+    
+    if (!isAllowed) {
       return new NextResponse(
         JSON.stringify({
           error: {
@@ -71,7 +114,7 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-XSS-Protection', '1; mode=block')
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
 
-    // CORS headers for API routes (configure as needed)
+    // CORS headers for API routes
     const origin = request.headers.get('origin')
     const allowedOrigins = [
       process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
@@ -90,7 +133,7 @@ export async function middleware(request: NextRequest) {
       )
     }
 
-    // Handle preflight requests
+    // Handle preflight OPTIONS requests
     if (request.method === 'OPTIONS') {
       return new NextResponse(null, { status: 200, headers: response.headers })
     }
@@ -98,77 +141,39 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Check authentication for protected routes
-  if (!PUBLIC_ROUTES.includes(pathname)) {
+  // Authentication check for dashboard routes
+  if (pathname.startsWith('/dashboard')) {
     const authCookie = request.cookies.get(AUTH_COOKIE_KEY)
-
+    
     if (!authCookie) {
-      // No auth cookie, redirect to login
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      url.searchParams.set('redirect', pathname)
-      return NextResponse.redirect(url)
+      return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    try {
-      // Parse and validate auth cookie
-      const authData = JSON.parse(authCookie.value)
-      const expiresAt = new Date(authData.expiresAt)
+    // Add cache headers for authenticated routes
+    const response = NextResponse.next()
+    response.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    
+    return response
+  }
 
-      if (expiresAt <= new Date()) {
-        // Session expired, redirect to login
-        const response = NextResponse.redirect(new URL('/login', request.url))
-        response.cookies.delete(AUTH_COOKIE_KEY)
-        return response
-      }
-    } catch (error) {
-      // Invalid auth cookie, redirect to login
-      const response = NextResponse.redirect(new URL('/login', request.url))
-      response.cookies.delete(AUTH_COOKIE_KEY)
-      return response
+  // Redirect authenticated users away from login
+  if (pathname === '/login') {
+    const authCookie = request.cookies.get(AUTH_COOKIE_KEY)
+    
+    if (authCookie) {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
     }
   }
 
-  // Add general security headers
-  const response = NextResponse.next()
-  
-  // Security headers
-  response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('X-Frame-Options', 'SAMEORIGIN')
-  response.headers.set('X-XSS-Protection', '1; mode=block')
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  response.headers.set(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), interest-cohort=()'
-  )
-
-  // Content Security Policy
-  if (process.env.NODE_ENV === 'production') {
-    response.headers.set(
-      'Content-Security-Policy',
-      "default-src 'self'; " +
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-      "style-src 'self' 'unsafe-inline'; " +
-      "img-src 'self' data: https:; " +
-      "font-src 'self' data:; " +
-      "connect-src 'self' https://sandbox.hyperswitch.io https://api.hyperswitch.io; " +
-      "frame-ancestors 'none';"
-    )
-  }
-
-  return response
+  return NextResponse.next()
 }
 
-// Configure which routes the middleware should run on
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/api/:path*',
+    '/dashboard/:path*'
+  ]
 }

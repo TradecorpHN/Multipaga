@@ -514,9 +514,13 @@ export class HttpPaymentRepository implements IPaymentRepository {
   /**
    * Lista pagos con filtros
    */
-  async list(merchantId: string, profileId: string, params: PaymentListParams = {}): Promise<PaymentListResponse> {
-    const startTime = Date.now()
-    this.logger.debug('Listing payments', { merchantId, profileId, params })
+async list(
+  merchantId: string, 
+  profileId: string, 
+  params: PaymentListParams = { offset: 0, limit: 20 }
+): Promise<PaymentListResponse> {
+  const startTime = Date.now()
+  this.logger.debug('Listing payments', { merchantId, profileId, params })
 
     try {
       // Verificar caché

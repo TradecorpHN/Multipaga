@@ -660,7 +660,7 @@ const ReconciliationList = React.forwardRef<HTMLDivElement, ReconciliationListPr
                     <TableHead className="w-12">
                       <Checkbox
                         checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
-                        onCheckedChange={handleSelectAll}
+onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
                       />
                     </TableHead>
                   )}

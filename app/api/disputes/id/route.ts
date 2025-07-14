@@ -43,8 +43,8 @@ export async function GET(
     const hyperswitchClient = getHyperswitchClient()
     
     try {
-      // Obtener disputa de Hyperswitch
-      const dispute: DisputeResponse = await hyperswitchClient.getDispute(disputeId)
+      // Obtener disputa de Hyperswitch usando método público tipado
+      const dispute = await hyperswitchClient.getDispute(disputeId) as DisputeResponse
       
       // Log de acceso para auditoría
       console.info('Dispute accessed:', {
@@ -184,7 +184,7 @@ export async function POST(
       case 'refresh':
         // Refrescar información de la disputa
         try {
-          const dispute = await hyperswitchClient.getDispute(disputeId)
+          const dispute = await hyperswitchClient.getDispute(disputeId) as DisputeResponse
           
           return NextResponse.json({
             success: true,

@@ -7,9 +7,9 @@
 
 import React from 'react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
+import { Button } from '/home/kali/multipaga/src/presentation/components/ui/Button'
+import { Badge } from '/home/kali/multipaga/src/presentation/components/ui/Badge'
+import { Separator } from '/home/kali/multipaga/src/presentation/components/ui/Separator'
 import { 
   ChevronRight,
   ArrowLeft,
@@ -30,8 +30,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
+} from '/home/kali/multipaga/src/presentation/components/ui/DropdownMenu'
+import { Input } from '/home/kali/multipaga/src/presentation/components/ui/Input'
 
 // Tipos para breadcrumbs
 interface BreadcrumbItem {

@@ -1,5 +1,5 @@
 // ==============================================================================
-// refund.schema.ts - Esquemas de validación para reembolsos
+// refund.schema.ts - Esquemas de validación para reembolsos (CORREGIDO)
 // ==============================================================================
 
 // /home/kali/multipaga/src/presentation/components/forms/validation/refund.schema.ts
@@ -161,7 +161,9 @@ export const refundFiltersSchema = z.object({
     .min(0, 'Offset must be 0 or greater')
     .default(0),
 }).refine(data => {
-  if (data.amount_gte !== null && data.amount_lte !== null) {
+  // CORRECCIÓN: Validar que ambos valores existan antes de compararlos
+  if (data.amount_gte !== null && data.amount_gte !== undefined && 
+      data.amount_lte !== null && data.amount_lte !== undefined) {
     return data.amount_gte <= data.amount_lte
   }
   return true
@@ -169,6 +171,7 @@ export const refundFiltersSchema = z.object({
   message: 'Minimum amount must be less than or equal to maximum amount',
   path: ['amount_gte']
 }).refine(data => {
+  // CORRECCIÓN: Validar que ambas fechas existan antes de compararlas
   if (data.created_gte && data.created_lte) {
     return data.created_gte <= data.created_lte
   }
@@ -320,7 +323,9 @@ export const autoRefundConfigSchema = z.object({
       .default(24),
   }).default({}),
 }).refine(data => {
-  if (data.conditions.min_amount !== null && data.conditions.max_amount !== null) {
+  // CORRECCIÓN: Validar que ambos valores existan antes de compararlos
+  if (data.conditions.min_amount !== null && data.conditions.min_amount !== undefined &&
+      data.conditions.max_amount !== null && data.conditions.max_amount !== undefined) {
     return data.conditions.min_amount <= data.conditions.max_amount
   }
   return true
@@ -464,4 +469,4 @@ export const REFUND_STATUS_CONFIG = {
     variant: 'warning' as const,
     description: 'Refund requires manual review'
   },
-} 
+}

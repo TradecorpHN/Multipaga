@@ -156,14 +156,15 @@ class MemoryRateLimitStore implements RateLimitStore {
     this.data.delete(key)
   }
 
-  async cleanup(): Promise<void> {
-    const now = Date.now()
-    for (const [key, info] of this.data.entries()) {
-      if (now > info.windowEnd) {
-        this.data.delete(key)
-      }
+async cleanup(): Promise<void> {
+  const now = Date.now()
+  const keysToDelete: string[] = []
+  
+      Array.from(this.data.entries()).forEach(([key, info]) => {
+    if (now > info.windowEnd) {
+      keysToDelete.push(key)
     }
-  }
+  })}
 
   destroy(): void {
     if (this.cleanupInterval) {
@@ -470,22 +471,25 @@ export class RateLimiter {
   // MÉTODOS PRIVADOS
   // ──────────────────────────────────────────────────────────────────────────────
 
-  private generateKey(request: RateLimitRequest): string {
-    switch (this.config.keyGenerator) {
-      case 'ip':
-        return `ip:${request.ip}`
-      case 'user':
-        return request.userId ? `user:${request.userId}` : `ip:${request.ip}`
-      case 'api-key':
-        return request.apiKey ? `api:${request.apiKey}` : `ip:${request.ip}`
-      case 'custom':
-        return this.config.customKeyExtractor 
-          ? this.config.customKeyExtractor(request)
-          : `ip:${request.ip}`
-      default:
-        return `ip:${request.ip}`
-    }
+private generateKey(request: RateLimitRequest): string {
+  switch (this.config.keyGenerator) {
+    case 'ip':
+      return `ip:${request.ip}`
+    case 'user':
+      return request.userId ? `user:${request.userId}` : `ip:${request.ip}`
+    case 'api-key':
+      return request.apiKey ? `api:${request.apiKey}` : `ip:${request.ip}`
+    case 'custom':
+      if (this.config.customKeyExtractor) {
+        const customKey = this.config.customKeyExtractor(request)
+        // Validar que el resultado sea string
+        return typeof customKey === 'string' ? customKey : `ip:${request.ip}`
+      }
+      return `ip:${request.ip}`
+    default:
+      return `ip:${request.ip}`
   }
+}
 
   private isWhitelisted(key: string, request: RateLimitRequest): boolean {
     return this.config.whitelist.some(pattern => {

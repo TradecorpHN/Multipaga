@@ -23,7 +23,7 @@ import { Badge } from '@/presentation/components/ui/Badge'
 import { Button } from '@/presentation/components/ui/Button'
 import { Separator } from '@/presentation/components/ui/Separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/presentation/components/ui/Tooltip'
-import { formatCurrency } from '@/presentation/lib/formatters'
+import { formatCurrency } from '/home/kali/multipaga/src/presentation/lib/utils/formatters'
 import { cn } from '@/presentation/lib/utils'
 
 // Timeline event types

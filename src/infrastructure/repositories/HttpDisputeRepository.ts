@@ -221,9 +221,14 @@ export class HttpDisputeRepository implements IDisputeRepository {
   /**
    * Lista disputas con filtros
    */
-  async list(merchantId: string, profileId: string, params: DisputeListParams = {}): Promise<DisputeListResponse> {
-    const startTime = Date.now()
-    this.logger.debug('Listing disputes', { merchantId, profileId, params })
+async list(
+  merchantId: string, 
+  profileId: string, 
+  params: DisputeListParams = { offset: 0, limit: 20 }
+): Promise<DisputeListResponse> {
+  const startTime = Date.now()
+  this.logger.debug('Listing disputes', { merchantId, profileId, params })
+
 
     try {
       // Verificar caché
@@ -240,12 +245,12 @@ export class HttpDisputeRepository implements IDisputeRepository {
       const url = DisputeEndpoints.listDisputes.buildUrl(this.config.baseUrl, params)
 
       // Hacer petición HTTP
-      const response = await this.makeRequest<DisputeResponse[]>(url, {
-        headers: {
-          'X-Merchant-Id': merchantId,
-          'X-Profile-Id': profileId,
-        },
-      })
+    const response = await this.makeRequest<DisputeResponse[]>('GET', url, {
+      headers: {
+        'X-Merchant-Id': merchantId,
+        'X-Profile-Id': profileId,
+      },
+    })
 
       // Validar response
       const disputes = z.array(DisputeResponseSchema).parse(response)

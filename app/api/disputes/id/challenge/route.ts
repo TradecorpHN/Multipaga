@@ -9,6 +9,28 @@ interface RouteContext {
   }
 }
 
+// ✅ Definir interfaz para la respuesta de disputa
+interface DisputeResponse {
+  dispute_id: string
+  payment_id: string
+  attempt_id: string
+  amount: string
+  currency: string
+  dispute_stage: 'pre_dispute' | 'dispute' | 'pre_arbitration'
+  dispute_status: 'dispute_opened' | 'dispute_expired' | 'dispute_accepted' | 'dispute_cancelled' | 'dispute_challenged' | 'dispute_won' | 'dispute_lost'
+  connector: string
+  connector_status: string
+  connector_dispute_id: string
+  connector_reason?: string
+  connector_reason_code?: string
+  challenge_required_by?: string
+  connector_created_at?: string
+  connector_updated_at?: string
+  created_at: string
+  profile_id?: string
+  merchant_connector_id?: string
+}
+
 // Schema de validación para envío de evidencia de disputa
 const challengeDisputeSchema = z.object({
   dispute_id: z.string(),
@@ -69,9 +91,10 @@ export async function POST(
     const hyperswitchClient = getHyperswitchClient()
     
     // Primero verificar que la disputa existe y puede ser disputada
-    let dispute
+    let dispute: DisputeResponse
     try {
-      dispute = await hyperswitchClient.getDispute(disputeId)
+      // ✅ Cast explícito al tipo correcto
+      dispute = await hyperswitchClient.getDispute(disputeId) as DisputeResponse
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'status_code' in error) {
         const hyperswitchError = error as any
@@ -90,7 +113,7 @@ export async function POST(
       throw error
     }
     
-    // Verificar que la disputa puede ser disputada
+    // ✅ Verificar que la disputa puede ser disputada
     if (dispute.dispute_status !== 'dispute_opened') {
       return NextResponse.json(
         { 
@@ -103,7 +126,7 @@ export async function POST(
       )
     }
     
-    // Verificar que no ha expirado el tiempo límite
+    // ✅ Verificar que no ha expirado el tiempo límite
     if (dispute.challenge_required_by) {
       const deadline = new Date(dispute.challenge_required_by)
       const now = new Date()
@@ -242,9 +265,10 @@ export async function GET(
     
     // Obtener información de la disputa
     try {
-      const dispute = await hyperswitchClient.getDispute(disputeId)
+      // ✅ Cast explícito al tipo correcto
+      const dispute = await hyperswitchClient.getDispute(disputeId) as DisputeResponse
       
-      // Calcular información sobre el challenge
+      // ✅ Calcular información sobre el challenge
       const now = new Date()
       const deadline = dispute.challenge_required_by ? new Date(dispute.challenge_required_by) : null
       

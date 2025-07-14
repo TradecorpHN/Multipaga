@@ -35,8 +35,6 @@ import { trpc } from '@/presentation/utils/trpc'
 import { useDebounce } from '@/presentation/hooks/useDebounce'
 import { format } from 'date-fns'
 import { es as esLocale } from 'date-fns/locale'
-// 🔴 Quita la importación duplicada de PopoverContent
-// import { PopoverContent } from '@/presentation/components/ui/Popover'
 
 // Opciones de formato moneda
 const USD_FORMAT: Intl.NumberFormatOptions = { style: 'currency', currency: 'USD' }
@@ -46,8 +44,8 @@ const STATUS_CONFIG = {
   dispute_expired: { label: 'Expired', variant: 'secondary' as const, icon: Clock },
   dispute_accepted: { label: 'Accepted', variant: 'secondary' as const, icon: CheckCircle },
   dispute_cancelled: { label: 'Cancelled', variant: 'secondary' as const, icon: XCircle },
-  dispute_challenged: { label: 'Challenged', variant: 'warning' as const, icon: MessageSquare },
-  dispute_won: { label: 'Won', variant: 'success' as const, icon: CheckCircle },
+  dispute_challenged: { label: 'Challenged', variant: 'default' as const, icon: MessageSquare },
+  dispute_won: { label: 'Won', variant: 'default' as const, icon: CheckCircle },
   dispute_lost: { label: 'Lost', variant: 'destructive' as const, icon: XCircle },
 }
 const STAGE_CONFIG = {
@@ -83,7 +81,8 @@ interface DisputeFilters {
 
 export default function DisputesPage() {
   const router = useRouter()
-  const toast = useToast()
+  // ✅ Corregir destructuring del hook useToast
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<DisputeFilters>({})
   const [currentPage, setCurrentPage] = useState(1)
@@ -123,15 +122,16 @@ export default function DisputesPage() {
   const acceptMutation = trpc.disputes.accept.useMutation({
     onSuccess: () => {
       toast({
-        message: 'Dispute Accepted. The dispute has been accepted and will be processed.',
-        type: 'success',
+        title: 'Dispute Accepted',
+        description: 'The dispute has been accepted and will be processed.',
       })
       refetch()
     },
     onError: (error: { message: string }) => {
       toast({
-        message: 'Action Failed: ' + error.message,
-        type: 'error',
+        title: 'Action Failed',
+        description: error.message,
+        variant: 'destructive'
       })
     },
   })
@@ -140,20 +140,21 @@ export default function DisputesPage() {
   const challengeMutation = trpc.disputes.challenge.useMutation({
     onSuccess: () => {
       toast({
-        message: 'Evidence Submitted. Your evidence has been submitted successfully.',
-        type: 'success',
+        title: 'Evidence Submitted',
+        description: 'Your evidence has been submitted successfully.',
       })
       refetch()
     },
     onError: (error: { message: string }) => {
       toast({
-        message: 'Submission Failed: ' + error.message,
-        type: 'error',
+        title: 'Submission Failed',
+        description: error.message,
+        variant: 'destructive'
       })
     },
   })
 
-  // 🔴 Cambia dispute_id por disputeId (lo que espera tu router)
+  // ✅ Cambia dispute_id por disputeId (lo que espera tu router)
   const handleAcceptDispute = (disputeId: string) => {
     if (confirm('Are you sure you want to accept this dispute? This action cannot be undone.')) {
       acceptMutation.mutate({ disputeId })
@@ -162,8 +163,8 @@ export default function DisputesPage() {
 
   const handleExport = () => {
     toast({
-      message: 'Export not implemented yet.',
-      type: 'info',
+      title: 'Export not implemented yet',
+      description: 'This feature will be available soon.',
     })
   }
 

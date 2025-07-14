@@ -44,7 +44,7 @@ import {
   PopoverTrigger,
 } from '@/presentation/components/ui/Popover'
 import { cn } from '@/presentation/lib/utils'
-import { formatCurrency } from '@/presentation/lib/formatters'
+import { formatCurrency } from '/home/kali/multipaga/src/presentation/lib/utils/formatters'
 
 // Filter schema
 const paymentFiltersSchema = z.object({
@@ -376,7 +376,7 @@ export default function PaymentFilters({
             key={index}
             variant="secondary"
             className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-            onClick={() => removeFilter(filter.key as keyof PaymentFiltersData, filter.value)}
+            onClick={() => removeFilter(filter.key as keyof PaymentFiltersData, filter.key)}
           >
             {filter.label}
             <X className="w-3 h-3 ml-1" />

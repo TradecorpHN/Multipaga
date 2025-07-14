@@ -47,8 +47,9 @@ import PaymentCard from './PaymentCard'
 import PaymentFilters from './PaymentFilters'
 import type { PaymentResponse } from '@/infrastructure/repositories/HttpPaymentRepository'
 import type { PaymentFilters as PaymentFiltersType } from '../forms/validation/payment.schema'
-import { formatCurrency } from '@/presentation/lib/formatters'
+import { formatCurrency } from '/home/kali/multipaga/src/presentation/lib/utils/formatters'
 import { cn } from '@/presentation/lib/utils'
+import type { PaymentFiltersInput } from '/home/kali/multipaga/src/types/filters'
 
 interface PaymentListProps {
   payments: PaymentResponse[]
@@ -58,7 +59,7 @@ interface PaymentListProps {
   isLoading?: boolean
   onPageChange: (page: number) => void
   onPageSizeChange: (size: number) => void
-  onFiltersChange: (filters: PaymentFiltersType) => void
+  onFiltersChange: (filters: PaymentFiltersInput) => void  // Usar el tipo de input
   onSort: (field: string, direction: 'asc' | 'desc') => void
   onRefresh: () => void
   onPaymentAction?: (action: string, paymentId: string) => void

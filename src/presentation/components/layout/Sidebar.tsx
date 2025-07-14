@@ -61,7 +61,7 @@ export default function Sidebar({
   className = '' 
 }: SidebarProps) {
   const pathname = usePathname()
-  const { user } = useAuth()
+const { merchant } = useAuth()
   const { stats, isLoading } = useSidebarStats()
   const [expandedSections, setExpandedSections] = useState<string[]>(['payments'])
 
@@ -426,9 +426,9 @@ export default function Sidebar({
             </div>
             <div>
               <h2 className="text-lg font-semibold">Multipaga</h2>
-              <p className="text-xs text-muted-foreground">
-                {user?.merchant_name || 'Panel de control'}
-              </p>
+<p className="text-xs text-muted-foreground">
+  {merchant?.business_profile?.profile_name || 'Panel de control'}
+</p>
             </div>
           </div>
         </div>
@@ -473,9 +473,9 @@ export default function Sidebar({
         <div className="border-t p-4">
           <div className="flex items-center space-x-3">
             <div className="flex-1">
-              <p className="text-sm font-medium">
-                {user?.name || user?.email || 'Usuario'}
-              </p>
+<p className="text-sm font-medium">
+  {merchant?.business_profile?.profile_name || merchant?.merchant_id || 'Merchant'}
+</p>
               <p className="text-xs text-muted-foreground">
                 Activo ahora
               </p>

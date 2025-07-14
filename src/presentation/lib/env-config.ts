@@ -1,3 +1,4 @@
+// src/presentation/lib/env-config.ts
 import { z } from 'zod'
 
 const envSchema = z.object({
@@ -9,7 +10,21 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().url('Invalid app URL').default('http://localhost:3000'),
   
   // Optional: Monitoring & Analytics
-  SENTRY_DSN: z.string().url('Invalid Sentry DSN').optional(),
+  SENTRY_DSN: z.string()
+    .optional()
+    .transform((val) => {
+      // Ignore placeholder values
+      if (!val || val === '' || val === 'your_sentry_dsn_here') {
+        return undefined
+      }
+      // Validate URL if provided
+      const urlResult = z.string().url().safeParse(val)
+      if (!urlResult.success) {
+        console.warn('Invalid SENTRY_DSN provided, Sentry will be disabled')
+        return undefined
+      }
+      return val
+    }),
   
   // Security Configuration
   RATE_LIMIT_WINDOW_MS: z.string().transform(Number).default('900000'), // 15 minutes
@@ -73,6 +88,10 @@ class EnvironmentConfig {
   public get isTest(): boolean {
     return this.config.NODE_ENV === 'test'
   }
+
+  public get hasSentry(): boolean {
+    return Boolean(this.config.SENTRY_DSN)
+  }
 }
 
 // Singleton instance
@@ -83,6 +102,7 @@ export const env = envConfig.env
 export const isProduction = envConfig.isProduction
 export const isDevelopment = envConfig.isDevelopment
 export const isTest = envConfig.isTest
+export const hasSentry = envConfig.hasSentry
 
 // Export the full config class for advanced usage
 export { EnvironmentConfig }

@@ -1,7 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { getHyperswitchClient } from '@/lib/hyperswitch'
-import type { PaymentRequest, PaymentResponse } from '@/types/hyperswitch'
+import { hyperswitchClient } from '/home/kali/multipaga/src/infrastructure/api/clients/HyperswitchClient'
+import type { 
+  PaymentRequest, 
+  PaymentResponse, 
+  Connector
+} from '@/types/hyperswitch'
+
+// Lista de conectores válidos para validación
+const validConnectors = [
+  'adyen', 'stripe', 'checkout', 'square', 'braintree', 'worldpay',
+  'paypal', 'razorpay', 'nuvei', 'shift4', 'cybersource', 'rapyd',
+  'fiserv', 'globalpay', 'worldline', 'payu', 'klarna', 'mollie'
+] as const
+
+// Lista de estados de pago válidos (array literal para z.enum)
+const paymentStatuses = [
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+  'processing',
+  'requires_capture',
+  'cancelled',
+  'succeeded',
+  'failed',
+  'partially_captured',
+  'partially_captured_and_capturable'
+] as const
 
 // Schema de validación para crear pagos
 const createPaymentSchema = z.object({
@@ -49,13 +74,14 @@ const createPaymentSchema = z.object({
     name: z.string().max(100).optional(),
     email: z.string().email().optional(),
   }).optional(),
-  connector: z.array(z.string()).optional(),
+  // Corregido: Array de conectores válidos en lugar de strings genéricos
+  connector: z.array(z.enum(validConnectors)).optional(),
   business_country: z.string().length(2).optional(),
   business_label: z.string().max(50).optional(),
   profile_id: z.string().optional(),
 })
 
-// Schema para listar pagos
+// Schema para listar pagos - Corregido el enum de estados
 const listPaymentsSchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(10),
   offset: z.coerce.number().min(0).default(0),
@@ -67,22 +93,19 @@ const listPaymentsSchema = z.object({
   created_gt: z.string().optional(),
   created_lte: z.string().optional(),
   created_gte: z.string().optional(),
-  status: z.enum([
-    'requires_payment_method',
-    'requires_confirmation',
-    'requires_action',
-    'processing',
-    'requires_capture',
-    'cancelled',
-    'succeeded',
-    'failed',
-    'partially_captured',
-    'partially_captured_and_capturable'
-  ]).optional(),
+  // Corregido: usar array literal en lugar de tipo
+  status: z.enum(paymentStatuses).optional(),
   currency: z.string().length(3).optional(),
   amount: z.coerce.number().optional(),
   connector: z.string().optional(),
 })
+
+// Interfaz para la respuesta de listado de pagos
+interface PaymentListResponse {
+  data: PaymentResponse[]
+  has_more: boolean
+  total_count: number
+}
 
 // GET /api/payments - Listar pagos
 export async function GET(request: NextRequest) {
@@ -93,9 +116,6 @@ export async function GET(request: NextRequest) {
     // Validar parámetros
     const validatedParams = listPaymentsSchema.parse(searchParams)
     
-    // Obtener cliente de Hyperswitch
-    const hyperswitchClient = getHyperswitchClient()
-    
     // Construir query string para Hyperswitch
     const queryParams = new URLSearchParams()
     Object.entries(validatedParams).forEach(([key, value]) => {
@@ -104,19 +124,20 @@ export async function GET(request: NextRequest) {
       }
     })
     
-    // Realizar petición a Hyperswitch
-    const payments = await hyperswitchClient.makeRequest(
-      `/payments/list?${queryParams.toString()}`
-    )
+    // Realizar petición a Hyperswitch usando método público tipado
+    const paymentsResponse = await hyperswitchClient.get<PaymentListResponse>(
+      `/payments/list`,
+      Object.fromEntries(queryParams.entries())
+    ) as PaymentListResponse
     
     return NextResponse.json({
       success: true,
-      data: payments.data || [],
+      data: paymentsResponse.data || [],
       pagination: {
         limit: validatedParams.limit,
         offset: validatedParams.offset,
-        has_more: payments.has_more || false,
-        total_count: payments.total_count || 0,
+        has_more: paymentsResponse.has_more || false,
+        total_count: paymentsResponse.total_count || 0,
       }
     })
 
@@ -180,12 +201,11 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Obtener cliente de Hyperswitch
-    const hyperswitchClient = getHyperswitchClient()
-    
-    // Preparar datos del pago
+    // Preparar datos del pago con tipos correctos
     const paymentData: PaymentRequest = {
       ...validatedData,
+      // Convertir el array de string a Connector[] si existe
+      connector: validatedData.connector as Connector[] | undefined,
       // Agregar datos adicionales requeridos por Hyperswitch
       business_country: validatedData.business_country || 'HN',
       business_label: validatedData.business_label || 'TradecorpHN',
@@ -197,8 +217,8 @@ export async function POST(request: NextRequest) {
       paymentData.return_url = `${baseUrl}/payments/complete`
     }
     
-    // Crear pago en Hyperswitch
-    const payment: PaymentResponse = await hyperswitchClient.createPayment(paymentData)
+    // Crear pago en Hyperswitch usando método público tipado
+    const payment = await hyperswitchClient.post<PaymentResponse>('/payments', paymentData)
     
     // Log del pago creado para auditoría
     console.info('Payment created:', {
@@ -287,21 +307,26 @@ export async function PUT(request: NextRequest) {
       )
     }
     
-    const hyperswitchClient = getHyperswitchClient()
     const results = []
     const errors = []
     
     // Procesar operaciones en batch
     for (const paymentId of payment_ids) {
       try {
-        let result
+        let result: PaymentResponse
         
         switch (operation) {
           case 'cancel':
-            result = await hyperswitchClient.cancelPayment(paymentId, operationData)
+            result = await hyperswitchClient.post<PaymentResponse>(
+              `/payments/${paymentId}/cancel`, 
+              operationData
+            )
             break
           case 'capture':
-            result = await hyperswitchClient.capturePayment(paymentId, operationData)
+            result = await hyperswitchClient.post<PaymentResponse>(
+              `/payments/${paymentId}/capture`, 
+              operationData
+            )
             break
           default:
             throw new Error(`Operación '${operation}' no soportada`)

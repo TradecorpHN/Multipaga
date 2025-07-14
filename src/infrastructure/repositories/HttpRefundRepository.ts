@@ -300,8 +300,7 @@ export class HttpRefundRepository implements IRefundRepository {
   /**
    * Lista reembolsos con filtros
    */
-  async list(merchantId: string, profileId: string, params: RefundListParams = {}): Promise<RefundListResponse> {
-    const startTime = Date.now()
+async list(merchantId: string, profileId: string, params: RefundListParams = { offset: 0, limit: 20 }): Promise<RefundListResponse> {    const startTime = Date.now()
     this.logger.debug('Listing refunds', { merchantId, profileId, params })
 
     try {

@@ -47,7 +47,7 @@ import {
 import { Separator } from '@/presentation/components/ui/Separator'
 import { Skeleton } from '@/presentation/components/ui/Skeleton'
 import RefundCard from './RefundCard'
-import { formatCurrency } from '@/presentation/lib/formatters'
+import { formatCurrency } from '/home/kali/multipaga/src/presentation/lib/utils/formatters'
 import { cn } from '@/presentation/lib/utils'
 
 // Refund interface (based on Hyperswitch)

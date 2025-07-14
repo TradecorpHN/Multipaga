@@ -33,7 +33,7 @@ import {
   DropdownMenuTrigger,
 } from '@/presentation/components/ui/DropdownMenu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/presentation/components/ui/Tooltip'
-import { formatCurrency } from '@/presentation/lib/formatters'
+import { formatCurrency } from '/home/kali/multipaga/src/presentation/lib/utils/formatters'
 import type { PaymentResponse } from '@/infrastructure/repositories/HttpPaymentRepository'
 
 // Status configuration with colors and icons

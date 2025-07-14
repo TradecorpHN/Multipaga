@@ -63,7 +63,7 @@ import {
 import { Skeleton } from '@/presentation/components/ui/Skeleton'
 import { Progress } from '@/presentation/components/ui/Progress'
 import PaymentStatus from './PaymentStatus'
-import { formatCurrency, formatNumber } from '@/presentation/lib/formatters'
+import { formatCurrency, formatNumber } from '/home/kali/multipaga/src/presentation/lib/utils/formatters'
 import { cn } from '@/presentation/lib/utils'
 import type { PaymentResponse } from '@/infrastructure/repositories/HttpPaymentRepository'
 

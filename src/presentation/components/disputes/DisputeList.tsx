@@ -183,7 +183,8 @@ export function DisputeList({
   className
 }: DisputeListProps) {
   const router = useRouter()
-  const { showToast } = useToast()
+  // CORRECCIÓN: Usar la desestructuración correcta del hook useToast
+  const { toast } = useToast()
   const [selectedDisputes, setSelectedDisputes] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<'created_at' | 'amount' | 'status'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
@@ -244,9 +245,9 @@ export function DisputeList({
   const handleCopy = async (text: string, label: string) => {
     const success = await copyToClipboard(text)
     if (success) {
-      showToast({
-        type: 'success',
-        message: `${label} copied to clipboard`
+      toast({
+        title: "Success",
+        description: `${label} copied to clipboard`
       })
     }
   }
@@ -530,13 +531,12 @@ export function DisputeList({
                           </div>
                         </TableCell>
                         <TableCell>
-                         <div className="space-y-1">
-  <p className="font-medium">
-    {formatCurrency(parseInt(dispute.amount), { currency: dispute.currency })}
-  </p>
-  <p className="text-xs text-gray-500">{dispute.currency}</p>
-</div>
-
+                          <div className="space-y-1">
+                            <p className="font-medium">
+                              {formatCurrency(parseInt(dispute.amount), { currency: dispute.currency })}
+                            </p>
+                            <p className="text-xs text-gray-500">{dispute.currency}</p>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant={statusConfig.variant} className="flex items-center space-x-1 w-fit">

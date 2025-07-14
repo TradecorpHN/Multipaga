@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getHyperswitchClient } from '@/lib/hyperswitch'
-import type { DisputeListRequest } from '@/types/hyperswitch'
+import type { DisputeListRequest, DisputeResponse } from '@/types/hyperswitch'
 
 // Schema de validación para listar disputas
 const listDisputesSchema = z.object({
@@ -30,6 +30,13 @@ const listDisputesSchema = z.object({
   received_time_gte: z.string().datetime().optional(),
 })
 
+// Interface para la respuesta de lista de disputas
+interface DisputeListResponse {
+  data: DisputeResponse[]
+  has_more: boolean
+  total_count: number
+}
+
 // GET /api/disputes - Listar disputas
 export async function GET(request: NextRequest) {
   try {
@@ -55,13 +62,13 @@ export async function GET(request: NextRequest) {
     const hyperswitchClient = getHyperswitchClient()
     
     try {
-      // Realizar petición a Hyperswitch
-      const disputesResponse = await hyperswitchClient.listDisputes(validatedParams)
+      // Realizar petición a Hyperswitch usando método público tipado
+      const disputesResponse = await hyperswitchClient.listDisputes(validatedParams) as DisputeListResponse
       
       // Transformar respuesta si es necesario
       const disputes = Array.isArray(disputesResponse.data) ? 
         disputesResponse.data : 
-        disputesResponse
+        disputesResponse as unknown as DisputeResponse[]
       
       // Log de acceso para auditoría
       console.info('Disputes listed:', {
