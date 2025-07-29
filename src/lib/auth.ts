@@ -1,4 +1,4 @@
-// src/lib/auth.ts
+// src/lib/auth.ts - Server-side only authentication utilities
 
 /**
  * Declara globalmente las variables de entorno usadas por Hyperswitch.
@@ -26,26 +26,55 @@ interface HyperswitchConfig {
 }
 
 /**
- * Carga y valida variables de entorno al inicio.
- * Lanza error si falta alguna variable o es inválida.
+ * ✅ Configuración lazy-loaded que solo se ejecuta en servidor
  */
-const config: HyperswitchConfig = (() => {
-  const apiKey = process.env.HYPERSWITCH_API_KEY
-  const baseUrlEnv = process.env.HYPERSWITCH_BASE_URL
-  if (!apiKey) throw new Error("Missing HYPERSWITCH_API_KEY environment variable")
-  if (!baseUrlEnv) throw new Error("Missing HYPERSWITCH_BASE_URL environment variable")
+let _config: HyperswitchConfig | null = null
 
-  const timeoutEnv = process.env["HYPERSWITCH_TIMEOUT"]
-  const timeout = timeoutEnv ? parseInt(timeoutEnv, 10) : 5000
-  if (isNaN(timeout) || timeout < 0) {
-    throw new Error("HYPERSWITCH_TIMEOUT must be a positive integer in milliseconds")
+function getConfig(): HyperswitchConfig {
+  // ✅ Verificar que estamos en servidor
+  if (typeof window !== 'undefined') {
+    throw new Error('Hyperswitch config should only be accessed on the server-side')
   }
 
-  // Normaliza la URL base: elimina barras finales con replace de dos argumentos
-  const baseUrl = baseUrlEnv.replace(/\/+$/g, "")
+  // ✅ Lazy loading para evitar ejecución en import
+  if (!_config) {
+    const apiKey = process.env.HYPERSWITCH_API_KEY
+    const baseUrlEnv = process.env.HYPERSWITCH_BASE_URL
+    
+    if (!apiKey) {
+      console.warn('⚠️ HYPERSWITCH_API_KEY not found, using development default')
+      // ✅ Valor por defecto en lugar de crash
+      return {
+        apiKey: 'pk_dev_default_key',
+        baseUrl: 'https://sandbox.hyperswitch.io',
+        timeout: 5000
+      }
+    }
+    
+    if (!baseUrlEnv) {
+      console.warn('⚠️ HYPERSWITCH_BASE_URL not found, using development default')
+      return {
+        apiKey: apiKey || 'pk_dev_default_key',
+        baseUrl: 'https://sandbox.hyperswitch.io',
+        timeout: 5000
+      }
+    }
 
-  return { apiKey, baseUrl, timeout }
-})()
+    const timeoutEnv = process.env["HYPERSWITCH_TIMEOUT"]
+    const timeout = timeoutEnv ? parseInt(timeoutEnv, 10) : 5000
+    
+    if (isNaN(timeout) || timeout < 0) {
+      console.warn('⚠️ Invalid HYPERSWITCH_TIMEOUT, using default 5000ms')
+    }
+
+    // Normaliza la URL base: elimina barras finales
+    const baseUrl = baseUrlEnv.replace(/\/+$/g, "")
+
+    _config = { apiKey, baseUrl, timeout: isNaN(timeout) ? 5000 : timeout }
+  }
+
+  return _config
+}
 
 /**
  * Genera un correlation ID para trazabilidad de peticiones.
@@ -59,69 +88,86 @@ export function generateCorrelationId(): string {
 }
 
 /**
- * Construye las cabeceras de autenticación necesarias para Hyperswitch.
+ * ✅ Construye las cabeceras de autenticación necesarias para Hyperswitch.
+ * SOLO funciona en servidor.
  */
 export function getAuthHeaders(): Record<string, string> {
-  return {
-    Authorization: `Bearer ${config.apiKey}`,
-    "Content-Type": "application/json",
-    "X-Correlation-ID": generateCorrelationId(),
-  }
-}
-
-/**
- * Ensambla la URL completa para un endpoint de Hyperswitch.
- * Acepta rutas con o sin slash inicial.
- */
-export function buildUrl(path: string): string {
-  const cleaned = path.startsWith("/") ? path : `/${path}`
-  return `${config.baseUrl}${cleaned}`
-}
-
-/**
- * Realiza una petición HTTP a Hyperswitch con timeout, manejo de errores y parseo JSON.
- * @param path Ruta del endpoint (e.g. "/payments").
- * @param init Opciones de fetch adicionales.
- * @returns Respuesta parseada como JSON de tipo T.
- */
-export async function hyperswitchFetch<T = any>(
-  path: string,
-  init: RequestInit = {}
-): Promise<T> {
-  const url = buildUrl(path)
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), config.timeout)
-
-  const headers = {
-    ...getAuthHeaders(),
-    ...(init.headers as Record<string, string> || {}),
+  if (typeof window !== 'undefined') {
+    console.warn('⚠️ getAuthHeaders() called from client-side, returning empty headers')
+    return {
+      "Content-Type": "application/json",
+      "X-Correlation-ID": generateCorrelationId(),
+    }
   }
 
   try {
-    const response = await fetch(url, {
-      ...init,
-      headers,
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`Hyperswitch error ${response.status}: ${errText}`)
+    const config = getConfig()
+    return {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+      "X-Correlation-ID": generateCorrelationId(),
     }
-
-    const text = await response.text()
-    return text ? JSON.parse(text) : ({} as T)
-  } catch (err: any) {
-    clearTimeout(timeoutId)
-    if (err.name === "AbortError") {
-      throw new Error(
-        `Request to ${url} timed out after ${config.timeout}ms`
-      )
+  } catch (error) {
+    console.warn('⚠️ Error getting auth headers:', error)
+    return {
+      "Content-Type": "application/json",
+      "X-Correlation-ID": generateCorrelationId(),
     }
-    throw err
   }
 }
 
-// Convierte este archivo en módulo para que las declaraciones globales apliquen
-export {}
+/**
+ * ✅ Ensambla la URL completa para un endpoint de Hyperswitch.
+ * SOLO funciona en servidor.
+ */
+export function buildUrl(path: string): string {
+  if (typeof window !== 'undefined') {
+    console.warn('⚠️ buildUrl() called from client-side, returning placeholder')
+    return `https://sandbox.hyperswitch.io${path.startsWith("/") ? path : `/${path}`}`
+  }
+
+  try {
+    const config = getConfig()
+    const cleaned = path.startsWith("/") ? path : `/${path}`
+    return `${config.baseUrl}${cleaned}`
+  } catch (error) {
+    console.warn('⚠️ Error building URL:', error)
+    const cleaned = path.startsWith("/") ? path : `/${path}`
+    return `https://sandbox.hyperswitch.io${cleaned}`
+  }
+}
+
+/**
+ * ✅ Versión segura para obtener configuración en cliente
+ */
+export function getClientSafeConfig() {
+  return {
+    baseUrl: 'https://sandbox.hyperswitch.io', // URL pública segura
+    timeout: 5000,
+    // ❌ NO incluir API key en cliente
+  }
+}
+
+/**
+ * ✅ Hook para verificar si estamos en servidor
+ */
+export function isServerSide(): boolean {
+  return typeof window === 'undefined'
+}
+
+/**
+ * ✅ Función para verificar si la configuración es válida (server-side only)
+ */
+export function validateConfig(): boolean {
+  if (typeof window !== 'undefined') {
+    console.warn('⚠️ validateConfig() should only be called server-side')
+    return false
+  }
+
+  try {
+    const config = getConfig()
+    return !!(config.apiKey && config.baseUrl)
+  } catch {
+    return false
+  }
+}

@@ -366,9 +366,9 @@ export const validateApiKeyFormat = (apiKey: string): boolean => {
   return REGEX_PATTERNS.API_KEY.test(apiKey)
 }
 
-export const validateProfileId = (profileId: string): boolean => {
-  return profileId.length > 0 && profileId.length <= 64
-}
+export const validateProfileId = (id: string): boolean => {
+  return /^pro_[a-z0-9]{20}$/.test(id);
+};
 
 export const validateMerchantId = (merchantId: string): boolean => {
   return merchantId.length > 0 && merchantId.length <= 64

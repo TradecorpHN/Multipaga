@@ -1,36 +1,57 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable React strict mode for better error handling
+  // ⚠️ CRÍTICO: NO usar experimental.appDir en Next.js 14+
+  // App Router está habilitado por defecto en Next.js 13.4+
+  
+  // React configuration
   reactStrictMode: true,
-
-  // Image optimization configuration
+  
+  // Performance optimizations
+  swcMinify: true,
+  poweredByHeader: false,
+  
+  // Image optimization
   images: {
-    domains: ['localhost'],
-    unoptimized: process.env.NODE_ENV === 'development',
+    domains: ['localhost', 'hyperswitch.io'],
     formats: ['image/avif', 'image/webp'],
+    unoptimized: process.env.NODE_ENV === 'development',
   },
 
-  // Security headers
+  // Environment variables que serán públicas
+  env: {
+    HYPERSWITCH_BASE_URL: process.env.HYPERSWITCH_BASE_URL,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+  },
+
+  // Redirects
+  async redirects() {
+    return [
+      {
+        source: '/dashboard',
+        destination: '/',
+        permanent: false,
+      },
+    ]
+  },
+
+  // Headers de seguridad
   async headers() {
     return [
       {
-        source: '/:path*',
+        source: '/(.*)',
         headers: [
+          // DOCTYPE será manejado automáticamente por Next.js
           {
             key: 'X-DNS-Prefetch-Control',
             value: 'on',
           },
           {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=63072000; includeSubDomains; preload',
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
           },
           {
             key: 'X-Frame-Options',
             value: 'SAMEORIGIN',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
           },
           {
             key: 'X-XSS-Protection',
@@ -40,99 +61,76 @@ const nextConfig = {
             key: 'Referrer-Policy',
             value: 'strict-origin-when-cross-origin',
           },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
-          },
         ],
       },
     ]
   },
 
-  // Redirects
-  async redirects() {
-    return [
-      {
-        source: '/home',
-        destination: '/',
-        permanent: true,
-      },
-      {
-        source: '/dashboard',
-        destination: '/',
-        permanent: true,
-      },
-    ]
-  },
-
-  // Environment variables validation
-  env: {
-    HYPERSWITCH_BASE_URL: process.env.HYPERSWITCH_BASE_URL,
-    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-  },
-
   // Webpack configuration
-  webpack: (config, { isServer }) => {
-    // Fix for Three.js
-    config.externals = config.externals || []
+  webpack: (config, { isServer, dev }) => {
+    // Fix para Three.js y otras librerías del lado cliente
     if (!isServer) {
+      config.externals = config.externals || []
       config.externals.push({
         'utf-8-validate': 'commonjs utf-8-validate',
         'bufferutil': 'commonjs bufferutil',
       })
     }
 
-    // Add custom webpack rules if needed
+    // GLSL loader para shaders
     config.module.rules.push({
       test: /\.(glsl|vs|fs|vert|frag)$/,
       exclude: /node_modules/,
       use: ['raw-loader', 'glslify-loader'],
     })
 
+    // Optimización para desarrollo
+    if (dev) {
+      config.watchOptions = {
+        poll: 1000,
+        aggregateTimeout: 300,
+      }
+    }
+
     return config
   },
 
-  // Performance optimizations
-  swcMinify: true,
-  compress: true,
-  
-  // Production optimizations
-  ...(process.env.NODE_ENV === 'production' && {
-    compiler: {
-      removeConsole: {
-        exclude: ['error', 'warn'],
-      },
-    },
-  }),
+  // Compilación optimizada
+  compiler: {
+    // Remover console.log en producción excepto errores
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
+  },
 
-  // Experimental features
+  // Configuraciones experimentales SEGURAS para Next.js 14
   experimental: {
-    // Enable server actions when needed
+    // Server Actions si los necesitas
     serverActions: {
       bodySizeLimit: '2mb',
     },
-    // Optimize CSS
+    // Optimizaciones de CSS
     optimizeCss: true,
+    // Mejorar tree shaking
+    serverComponentsExternalPackages: ['@hyperswitch/node'],
   },
 
-  // Output configuration
-  output: 'standalone',
-
-  // Custom build directory (optional)
-  // distDir: '.next',
-
-  // Trailing slash configuration
+  // Trailing slash
   trailingSlash: false,
 
-  // Skip type checking during build (if needed for CI/CD)
-  // typescript: {
-  //   ignoreBuildErrors: true,
-  // },
+  // Configuración de output para deployment
+  output: 'standalone',
 
-  // Skip ESLint during build (if needed for CI/CD)
-  // eslint: {
-  //   ignoreDuringBuilds: true,
-  // },
+  // TypeScript configuration
+  typescript: {
+    // ⚠️ Solo usar en desarrollo si tienes errores de tipos que quieres ignorar temporalmente
+    ignoreBuildErrors: false,
+  },
+
+  // ESLint configuration
+  eslint: {
+    ignoreDuringBuilds: false,
+  },
 }
 
 module.exports = nextConfig

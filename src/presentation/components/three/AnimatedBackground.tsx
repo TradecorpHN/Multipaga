@@ -1,4 +1,5 @@
 'use client'
+import dynamic from 'next/dynamic'
 
 import { Suspense, useRef, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'

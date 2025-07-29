@@ -1,179 +1,159 @@
+
+// src/presentation/lib/utils.ts
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 
-// Merge class names with Tailwind CSS conflict resolution
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Re-export utilities
-export * from './utils/formatters'
-export * from './utils/clipboard'
+/**
+ * Genera un ID único
+ */
+export function generateId(prefix?: string): string {
+  const id = Math.random().toString(36).substring(2, 9)
+  return prefix ? `${prefix}_${id}` : id
+}
 
-// Debounce function
+/**
+ * Debounce function
+ */
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout | null = null
-
-  return function executedFunction(...args: Parameters<T>) {
-    const later = () => {
-      timeout = null
-      func(...args)
-    }
-
-    if (timeout) clearTimeout(timeout)
-    timeout = setTimeout(later, wait)
+  let timeout: NodeJS.Timeout
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout)
+    timeout = setTimeout(() => func(...args), wait)
   }
 }
 
-// Throttle function
+/**
+ * Throttle function
+ */
 export function throttle<T extends (...args: any[]) => any>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
-  let inThrottle = false
-
+  let lastFunc: NodeJS.Timeout
+  let lastRan: number
   return (...args: Parameters<T>) => {
-    if (!inThrottle) {
+    if (!lastRan) {
       func(...args)
-      inThrottle = true
-      setTimeout(() => (inThrottle = false), limit)
+      lastRan = Date.now()
+    } else {
+      clearTimeout(lastFunc)
+      lastFunc = setTimeout(() => {
+        if (Date.now() - lastRan >= limit) {
+          func(...args)
+          lastRan = Date.now()
+        }
+      }, limit - (Date.now() - lastRan))
     }
   }
 }
 
-// Sleep/delay function
+/**
+ * Sleep function
+ */
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-// Generate unique ID
-export function generateId(prefix: string = 'id'): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-}
-
-// Check if running in browser
-export function isBrowser(): boolean {
-  return typeof window !== 'undefined'
-}
-
-// Check if running on mobile
-export function isMobile(): boolean {
-  if (!isBrowser()) return false
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent
-  )
-}
-
-// Get query params from URL
-export function getQueryParams(url?: string): Record<string, string> {
-  const queryString = url ? new URL(url).search : window.location.search
-  const params = new URLSearchParams(queryString)
-  const result: Record<string, string> = {}
-
-  params.forEach((value, key) => {
-    result[key] = value
-  })
-
-  return result
-}
-
-// Build query string from object
-export function buildQueryString(params: Record<string, any>): string {
-  const searchParams = new URLSearchParams()
-
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
-      if (Array.isArray(value)) {
-        value.forEach(v => searchParams.append(key, String(v)))
-      } else {
-        searchParams.append(key, String(value))
-      }
+/**
+ * Copy to clipboard
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch (error) {
+    // Fallback for older browsers
+    try {
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-999999px'
+      textArea.style.top = '-999999px'
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      const successful = document.execCommand('copy')
+      document.body.removeChild(textArea)
+      return successful
+    } catch (error) {
+      return false
     }
-  })
-
-  const queryString = searchParams.toString()
-  return queryString ? `?${queryString}` : ''
-}
-
-// Deep clone object
-export function deepClone<T>(obj: T): T {
-  if (obj === null || typeof obj !== 'object') return obj
-  if (obj instanceof Date) return new Date(obj.getTime()) as any
-  if (Array.isArray(obj)) return obj.map(item => deepClone(item)) as any
-  if (obj instanceof Object) {
-    const clonedObj = {} as T
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        clonedObj[key] = deepClone((obj as any)[key])
-      }
-    }
-    return clonedObj
   }
-  return obj
 }
 
-// Check if object is empty
-export function isEmpty(obj: any): boolean {
-  if (!obj) return true
-  if (Array.isArray(obj)) return obj.length === 0
-  if (typeof obj === 'object') return Object.keys(obj).length === 0
-  return false
+/**
+ * Format bytes to human readable format
+ */
+export function formatBytes(bytes: number, decimals = 2): string {
+  if (bytes === 0) return '0 Bytes'
+
+  const k = 1024
+  const dm = decimals < 0 ? 0 : decimals
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
 }
 
-// Group array by key
-export function groupBy<T>(array: T[], key: keyof T): Record<string, T[]> {
-  return array.reduce((result, item) => {
-    const groupKey = String(item[key])
-    if (!result[groupKey]) {
-      result[groupKey] = []
-    }
-    result[groupKey].push(item)
-    return result
-  }, {} as Record<string, T[]>)
+/**
+ * Capitalize first letter
+ */
+export function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
-// Sort array of objects by key
-export function sortBy<T>(array: T[], key: keyof T, order: 'asc' | 'desc' = 'asc'): T[] {
-  return [...array].sort((a, b) => {
-    const aVal = a[key]
-    const bVal = b[key]
-
-    if (aVal < bVal) return order === 'asc' ? -1 : 1
-    if (aVal > bVal) return order === 'asc' ? 1 : -1
-    return 0
-  })
+/**
+ * Generate random color
+ */
+export function generateRandomColor(): string {
+  const colors = [
+    '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444',
+    '#06b6d4', '#8b5cf6', '#f97316', '#ec4899', '#84cc16'
+  ]
+  return colors[Math.floor(Math.random() * colors.length)]
 }
 
-// Pick specific keys from object
-export function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
-  const result = {} as Pick<T, K>
-  keys.forEach(key => {
-    if (key in obj) {
-      result[key] = obj[key]
-    }
-  })
-  return result
+/**
+ * Check if device is mobile
+ */
+export function isMobile(): boolean {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 }
 
-// Omit specific keys from object
-export function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
-  const result = { ...obj }
-  keys.forEach(key => {
-    delete result[key]
-  })
-  return result as Omit<T, K>
+/**
+ * Get contrast color (black or white) for a given background color
+ */
+export function getContrastColor(hexColor: string): string {
+  // Convert hex to RGB
+  const r = parseInt(hexColor.substr(1, 2), 16)
+  const g = parseInt(hexColor.substr(3, 2), 16)
+  const b = parseInt(hexColor.substr(5, 2), 16)
+  
+  // Calculate luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  
+  return luminance > 0.5 ? '#000000' : '#ffffff'
 }
 
-// Validate email
+/**
+ * Validate email format
+ */
 export function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return emailRegex.test(email)
 }
 
-// Validate URL
+/**
+ * Validate URL format
+ */
 export function isValidUrl(url: string): boolean {
   try {
     new URL(url)
@@ -183,89 +163,57 @@ export function isValidUrl(url: string): boolean {
   }
 }
 
-// Format error message
-export function formatError(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as any).message)
-  }
-  return 'An unknown error occurred'
+/**
+ * Get file extension from filename
+ */
+export function getFileExtension(filename: string): string {
+  return filename.slice((filename.lastIndexOf('.') - 1 >>> 0) + 2)
 }
 
-// Retry function with exponential backoff
-export async function retry<T>(
-  fn: () => Promise<T>,
-  options: {
-    attempts?: number
-    delay?: number
-    maxDelay?: number
-    onError?: (error: Error, attempt: number) => void
-  } = {}
-): Promise<T> {
-  const {
-    attempts = 3,
-    delay = 1000,
-    maxDelay = 10000,
-    onError
-  } = options
-
-  let lastError: Error
-
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn()
-    } catch (error) {
-      lastError = error as Error
-
-      if (onError) onError(lastError, i + 1)
-
-      if (i < attempts - 1) {
-        const waitTime = Math.min(delay * Math.pow(2, i), maxDelay)
-        await sleep(waitTime)
+/**
+ * Convert object to query string
+ */
+export function objectToQueryString(obj: Record<string, any>): string {
+  const params = new URLSearchParams()
+  
+  Object.entries(obj).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      if (Array.isArray(value)) {
+        value.forEach(v => params.append(key, String(v)))
+      } else {
+        params.append(key, String(value))
       }
     }
-  }
-
-  throw lastError!
+  })
+  
+  return params.toString()
 }
 
-// Parse JSON safely
-export function parseJSON<T>(json: string, fallback?: T): T | undefined {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return fallback
-  }
-}
-
-// Get nested value from object
-export function get<T>(obj: any, path: string, defaultValue?: T): T {
-  const keys = path.split('.')
-  let result = obj
-
-  for (const key of keys) {
-    result = result?.[key]
-    if (result === undefined) {
-      return defaultValue as T
+/**
+ * Deep clone object
+ */
+export function deepClone<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj
+  if (obj instanceof Date) return new Date(obj.getTime()) as unknown as T
+  if (obj instanceof Array) return obj.map(deepClone) as unknown as T
+  if (typeof obj === 'object') {
+    const clonedObj = {} as T
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        clonedObj[key] = deepClone(obj[key])
+      }
     }
+    return clonedObj
   }
-
-  return result
-}
-
-// Set nested value in object
-export function set<T extends object>(obj: T, path: string, value: any): T {
-  const keys = path.split('.')
-  const lastKey = keys.pop()!
-  let target: any = obj
-
-  for (const key of keys) {
-    if (typeof target[key] !== 'object' || target[key] === null) {
-      target[key] = {}
-    }
-    target = target[key]
-  }
-  target[lastKey] = value
   return obj
+}
+
+/**
+ * Check if object is empty
+ */
+export function isEmpty(obj: any): boolean {
+  if (obj == null) return true
+  if (Array.isArray(obj) || typeof obj === 'string') return obj.length === 0
+  if (typeof obj === 'object') return Object.keys(obj).length === 0
+  return false
 }

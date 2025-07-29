@@ -1,262 +1,413 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import Cookies from 'js-cookie'
-import { hyperswitchClient } from '@/infrastructure/api/clients/HyperswitchClient'
-import { z } from 'zod'
-import toast from 'react-hot-toast'
+'use client';
 
-// Auth State Schema
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { z } from 'zod';
+import toast from 'react-hot-toast';
+
+// =============== SCHEMAS ===============
+
 const AuthStateSchema = z.object({
-  merchantId: z.string(),
-  profileId: z.string(),
-  profileName: z.string().optional(),
+  customerId: z.string(),
+  customerName: z.string().nullable(),
+  environment: z.enum(['sandbox', 'production']),
   isAuthenticated: z.boolean(),
-  expiresAt: z.string(),
-})
+  expiresAt: z.string().datetime(),
+  apiKey: z.string(),
+});
 
-type AuthState = z.infer<typeof AuthStateSchema>
-
-// Login Credentials Schema
 const LoginCredentialsSchema = z.object({
-  merchantId: z.string().min(1, 'Merchant ID is required'),
-  profileId: z.string().min(1, 'Profile ID is required'),
-})
+  apiKey: z
+    .string()
+    .min(1, 'API Key es requerida')
+    .min(10, 'API Key debe tener al menos 10 caracteres')
+    .regex(/^(snd_[a-zA-Z0-9]+)/, 'API Key debe comenzar con "snd_"'),
+  environment: z.enum(['sandbox', 'production']).default('sandbox'),
+});
 
-type LoginCredentials = z.infer<typeof LoginCredentialsSchema>
+const SessionResponseSchema = z.object({
+  success: z.boolean(),
+  isAuthenticated: z.boolean(),
+  code: z.string().optional(),
+  error: z.string().optional(),
+  customer: z
+    .object({
+      customer_id: z.string(),
+      customer_name: z.string().nullable(),
+      environment: z.enum(['sandbox', 'production']),
+    })
+    .optional(),
+  session: z
+    .object({
+      expires_at: z.string().datetime(),
+    })
+    .optional(),
+});
 
-// Auth Context Interface
-interface AuthContextValue {
-  authState: AuthState | null
-  isLoading: boolean
-  login: (credentials: LoginCredentials) => Promise<void>
-  logout: () => Promise<void>
-  refreshAuth: () => Promise<void>
+const LoginResponseSchema = z.object({
+  success: z.boolean(),
+  code: z.string().optional(),
+  error: z.string().optional(),
+  details: z
+    .array(
+      z.object({
+        field: z.string().optional(),
+        message: z.string(),
+      })
+    )
+    .optional(),
+  customer: z
+    .object({
+      customer_id: z.string(),
+      customer_name: z.string().nullable(),
+      environment: z.enum(['sandbox', 'production']),
+    })
+    .optional(),
+  session: z
+    .object({
+      expires_at: z.string().datetime(),
+    })
+    .optional(),
+});
+
+const RefreshResponseSchema = z.object({
+  success: z.boolean(),
+  code: z.string().optional(),
+  error: z.string().optional(),
+  session: z
+    .object({
+      expires_at: z.string().datetime(),
+    })
+    .optional(),
+});
+
+type AuthState = z.infer<typeof AuthStateSchema>;
+type LoginCredentials = z.infer<typeof LoginCredentialsSchema>;
+type ErrorDetail = { field?: string; message: string };
+
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+  code?: string;
+  details?: ErrorDetail[];
 }
 
-// Cookie Keys
-const AUTH_COOKIE_KEY = 'hyperswitch_auth'
-const AUTH_EXPIRY_HOURS = 24
+interface AuthContextValue {
+  authState: AuthState | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  isCheckingSession: boolean;
+  error: string | null;
+  login: (credentials: LoginCredentials) => Promise<LoginResult>;
+  logout: (reason?: string) => Promise<void>;
+  refreshAuth: () => Promise<void>;
+  clearError: () => void;
+  getApiHeaders: () => Record<string, string>;
+}
 
-// Create Context
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+// =============== CONSTANTS ===============
 
-// Auth Provider Component
+const API_URLS = {
+  sandbox: 'https://sandbox.hyperswitch.io',
+  production: 'https://api.hyperswitch.io',
+};
+
+// =============== CONTEXT ===============
+
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+// =============== PROVIDER ===============
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter()
-  const [authState, setAuthState] = useState<AuthState | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter();
+  const pathname = usePathname();
 
-  // Load auth state from cookies on mount
-  useEffect(() => {
-    const loadAuthState = () => {
+  // Estado local
+  const [authState, setAuthState] = useState<AuthState | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Estado derivado
+  const isAuthenticated = authState?.isAuthenticated ?? false;
+
+  // =============== FUNCIONES AUXILIARES ===============
+
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // =============== VERIFICAR SESIÓN ===============
+
+  const checkSession = useCallback(async (silent = true): Promise<boolean> => {
+    try {
+      setIsCheckingSession(true);
+      const response = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const rawResponse = await response.text();
+      console.log('Raw session response:', rawResponse); // Debug
+      let data;
       try {
-        const cookieData = Cookies.get(AUTH_COOKIE_KEY)
-        if (cookieData) {
-          const parsedData = JSON.parse(cookieData)
-          const validatedData = AuthStateSchema.parse(parsedData)
-          
-          // Check if session is expired
-          if (new Date(validatedData.expiresAt) > new Date()) {
-            setAuthState(validatedData)
-            hyperswitchClient.setAuthContext(validatedData.merchantId, validatedData.profileId)
-          } else {
-            // Session expired, clear cookies
-            Cookies.remove(AUTH_COOKIE_KEY)
-          }
+        data = SessionResponseSchema.parse(JSON.parse(rawResponse));
+      } catch (parseError) {
+        console.error('Error parsing session response:', parseError, { rawResponse });
+        throw new Error('Respuesta inválida del servidor');
+      }
+
+      if (response.ok && data.success && data.isAuthenticated && data.customer && data.session) {
+        setAuthState({
+          customerId: data.customer.customer_id,
+          customerName: data.customer.customer_name,
+          environment: data.customer.environment,
+          isAuthenticated: true,
+          expiresAt: data.session.expires_at,
+          apiKey: '',
+        });
+        setError(null);
+        return true;
+      } else {
+        setAuthState(null);
+        if (!silent && data.error) {
+          setError(data.error);
+          toast.error(data.error);
         }
+        return false;
+      }
+    } catch (error) {
+      console.error('Error checking session:', error);
+      setAuthState(null);
+      if (!silent) {
+        const errorMessage = 'Error verificando sesión';
+        setError(errorMessage);
+        toast.error(errorMessage);
+      }
+      return false;
+    } finally {
+      setIsCheckingSession(false);
+    }
+  }, []);
+
+  // =============== LOGIN ===============
+
+  const login = useCallback(
+    async (credentials: LoginCredentials): Promise<LoginResult> => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const validatedCredentials = LoginCredentialsSchema.parse(credentials);
+
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            apiKey: validatedCredentials.apiKey,
+            environment: validatedCredentials.environment,
+          }),
+        });
+
+        const rawResponse = await response.text();
+        console.log('Raw login response:', rawResponse); // Debug
+        let data;
+        try {
+          data = LoginResponseSchema.parse(JSON.parse(rawResponse));
+        } catch (parseError) {
+          console.error('Error parsing login response:', parseError, { rawResponse });
+          throw new Error('Respuesta inválida del servidor');
+        }
+
+        if (!response.ok || !data.success) {
+          const errorMessage = data.error || 'Error al iniciar sesión';
+          setError(errorMessage);
+          toast.error(errorMessage);
+          return {
+            success: false,
+            error: errorMessage,
+            code: data.code,
+            details: data.details,
+          };
+        }
+
+        if (!data.customer || !data.session) {
+          const errorMessage = 'Respuesta incompleta del servidor';
+          setError(errorMessage);
+          toast.error(errorMessage);
+          return { success: false, error: errorMessage, code: 'INVALID_RESPONSE' };
+        }
+
+        const newAuthState: AuthState = {
+          customerId: data.customer.customer_id,
+          customerName: data.customer.customer_name,
+          environment: data.customer.environment,
+          isAuthenticated: true,
+          expiresAt: data.session.expires_at,
+          apiKey: validatedCredentials.apiKey,
+        };
+
+        setAuthState(newAuthState);
+        toast.success('¡Login exitoso!');
+        return { success: true };
       } catch (error) {
-        console.error('Failed to load auth state:', error)
-        Cookies.remove(AUTH_COOKIE_KEY)
+        console.error('Login error:', error);
+        let errorMessage = 'Error inesperado al iniciar sesión';
+        let details: ErrorDetail[] | undefined;
+        if (error instanceof z.ZodError) {
+          errorMessage = 'Datos de entrada inválidos';
+          details = error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        setError(errorMessage);
+        toast.error(errorMessage);
+        return { success: false, error: errorMessage, details };
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    },
+    []
+  );
 
-    loadAuthState()
-  }, [])
+  // =============== LOGOUT ===============
 
-  // Login function
-  const login = useCallback(async (credentials: LoginCredentials) => {
-    setIsLoading(true)
-    
+  const logout = useCallback(
+    async (reason?: string) => {
+      setIsLoading(true);
+      try {
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch (error) {
+        console.error('Error during logout:', error);
+      }
+      setAuthState(null);
+      setError(null);
+      toast.success('Sesión cerrada exitosamente');
+      const loginUrl = reason ? `/login?reason=${reason}` : '/login';
+      router.push(loginUrl);
+      setIsLoading(false);
+    },
+    [router]
+  );
+
+  // =============== REFRESH ===============
+
+  const refreshAuth = useCallback(async () => {
     try {
-      // Validate credentials
-      const validatedCredentials = LoginCredentialsSchema.parse(credentials)
-      
-      // Verify profile exists by attempting to fetch it
-      const profileResponse = await hyperswitchClient.get(
-        `/account/${validatedCredentials.merchantId}/profile/${validatedCredentials.profileId}`
-      )
-      
-      // Calculate expiry time
-      const expiresAt = new Date()
-      expiresAt.setHours(expiresAt.getHours() + AUTH_EXPIRY_HOURS)
-      
-      // Create auth state
-      const newAuthState: AuthState = {
-        merchantId: validatedCredentials.merchantId,
-        profileId: validatedCredentials.profileId,
-        profileName: (profileResponse as any).profile_name,
-        isAuthenticated: true,
-        expiresAt: expiresAt.toISOString(),
-      }
-      
-      // Set auth context in HTTP client
-      hyperswitchClient.setAuthContext(validatedCredentials.merchantId, validatedCredentials.profileId)
-      
-      // Save to cookies
-      Cookies.set(AUTH_COOKIE_KEY, JSON.stringify(newAuthState), {
-        expires: expiresAt,
-        secure: true,
-        sameSite: 'strict',
-      })
-      
-      // Update state
-      setAuthState(newAuthState)
-      
-      // Show success message
-      toast.success('Login successful!')
-      
-      // Redirect to dashboard
-      router.push('/')
-      
-    } catch (error) {
-      let errorMessage = 'Login failed. Please check your credentials.'
-      
-      if (error instanceof Error) {
-        if (error.message.includes('404')) {
-          errorMessage = 'Invalid Merchant ID or Profile ID'
-        } else if (error.message.includes('401')) {
-          errorMessage = 'Unauthorized. Please check your API key configuration.'
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const rawResponse = await response.text();
+      console.log('Raw refresh response:', rawResponse); // Debug
+      const data = RefreshResponseSchema.parse(JSON.parse(rawResponse));
+
+      if (response.ok && data.success && data.session) {
+        setAuthState((prev) =>
+          prev && data.session ? { ...prev, expiresAt: data.session.expires_at } : null
+        );
+      } else {
+        if (data.code === 'REFRESH_TOKEN_EXPIRED' || data.code === 'INCOMPLETE_SESSION') {
+          await logout('session_expired');
+        } else {
+          await logout('session_expired');
         }
       }
-      
-      toast.error(errorMessage)
-      throw error
-    } finally {
-      setIsLoading(false)
-    }
-  }, [router])
-
-  // Logout function
-  const logout = useCallback(async () => {
-    setIsLoading(true)
-    
-    try {
-      // Clear auth context in HTTP client
-      hyperswitchClient.clearAuthContext()
-      
-      // Clear cookies
-      Cookies.remove(AUTH_COOKIE_KEY)
-      
-      // Clear state
-      setAuthState(null)
-      
-      // Show success message
-      toast.success('Logged out successfully')
-      
-      // Redirect to login
-      router.push('/login')
-      
     } catch (error) {
-      console.error('Logout error:', error)
-      toast.error('Failed to logout properly')
-    } finally {
-      setIsLoading(false)
+      console.error('Error refreshing session:', error);
+      await logout('session_expired');
     }
-  }, [router])
+  }, [logout]);
 
-  // Refresh auth function (extends session)
-  const refreshAuth = useCallback(async () => {
-    if (!authState) return
-    
-    try {
-      // Calculate new expiry time
-      const expiresAt = new Date()
-      expiresAt.setHours(expiresAt.getHours() + AUTH_EXPIRY_HOURS)
-      
-      // Update auth state with new expiry
-      const updatedAuthState: AuthState = {
-        ...authState,
-        expiresAt: expiresAt.toISOString(),
-      }
-      
-      // Update cookies
-      Cookies.set(AUTH_COOKIE_KEY, JSON.stringify(updatedAuthState), {
-        expires: expiresAt,
-        secure: true,
-        sameSite: 'strict',
-      })
-      
-      // Update state
-      setAuthState(updatedAuthState)
-      
-    } catch (error) {
-      console.error('Failed to refresh auth:', error)
-      throw error
+  // =============== HEADERS ===============
+
+  const getApiHeaders = useCallback((): Record<string, string> => {
+    if (!authState?.isAuthenticated || !authState.apiKey) {
+      throw new Error('No authenticated session or API key available');
     }
-  }, [authState])
+    return {
+      'Content-Type': 'application/json',
+      'api-key': authState.apiKey,
+      'X-Environment': authState.environment,
+    };
+  }, [authState]);
 
-  // Auto-refresh session before expiry
+  // =============== EFFECTS ===============
+
   useEffect(() => {
-    if (!authState) return
-    
-    const checkAndRefresh = () => {
-      const expiryTime = new Date(authState.expiresAt).getTime()
-      const currentTime = new Date().getTime()
-      const timeUntilExpiry = expiryTime - currentTime
-      
-      // Refresh if less than 1 hour until expiry
-      if (timeUntilExpiry < 60 * 60 * 1000 && timeUntilExpiry > 0) {
-        refreshAuth()
+    const handleAuth = async () => {
+      const isValidSession = await checkSession(true);
+      const isAuthRoute = pathname?.startsWith('/login');
+      const isPublicRoute = ['/login', '/signup', '/forgot-password'].includes(pathname || '');
+
+      if (!isValidSession && !isPublicRoute && !isAuthRoute) {
+        const currentPath = encodeURIComponent((pathname || '') + window.location.search);
+        router.push(`/login?redirect=${currentPath}`);
+      } else if (isValidSession && isAuthRoute) {
+        router.push('/dashboard');
       }
+    };
+
+    handleAuth();
+  }, [checkSession, pathname, router]);
+
+  useEffect(() => {
+    if (!authState?.isAuthenticated) return;
+
+    const expiryTime = new Date(authState.expiresAt).getTime();
+    const currentTime = Date.now();
+    const timeUntilExpiry = expiryTime - currentTime;
+    const refreshTime = timeUntilExpiry - 5 * 60 * 1000;
+
+    if (refreshTime > 0) {
+      const timeoutId = setTimeout(() => refreshAuth(), refreshTime);
+      return () => clearTimeout(timeoutId);
+    } else if (timeUntilExpiry <= 0) {
+      logout('session_expired');
     }
-    
-    // Check every 5 minutes
-    const interval = setInterval(checkAndRefresh, 5 * 60 * 1000)
-    
-    // Check immediately
-    checkAndRefresh()
-    
-    return () => clearInterval(interval)
-  }, [authState, refreshAuth])
+  }, [authState, logout, refreshAuth]);
+
+  // =============== CONTEXT VALUE ===============
 
   const contextValue: AuthContextValue = {
     authState,
     isLoading,
+    isAuthenticated,
+    isCheckingSession,
+    error,
     login,
     logout,
     refreshAuth,
-  }
+    clearError,
+    getApiHeaders,
+  };
 
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
 
-// Custom hook to use auth context
+// =============== HOOKS ===============
+
 export function useAuth() {
-  const context = useContext(AuthContext)
-  
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
+    throw new Error('useAuth debe ser usado dentro de AuthProvider');
   }
-  
-  return context
+  return context;
 }
 
-// Helper hook for protected routes
 export function useRequireAuth() {
-  const { authState, isLoading } = useAuth()
-  const router = useRouter()
-  
-  useEffect(() => {
-    if (!isLoading && !authState?.isAuthenticated) {
-      router.push('/login')
-    }
-  }, [authState, isLoading, router])
-  
-  return { isAuthenticated: authState?.isAuthenticated ?? false, isLoading }
+  const { isAuthenticated, isLoading, isCheckingSession } = useAuth();
+  return { isAuthenticated, isLoading, isCheckingSession };
+}
+
+export function useCustomer() {
+  const { authState } = useAuth();
+  return {
+    customerId: authState?.customerId,
+    customerName: authState?.customerName,
+    environment: authState?.environment,
+    isAuthenticated: authState?.isAuthenticated ?? false,
+  };
 }

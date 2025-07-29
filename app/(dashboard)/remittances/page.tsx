@@ -93,7 +93,7 @@ const mockRemittancesData = {
     {
       reference_number: 'REM-001',
       type: 'outbound',
-      sender_name: 'Juan Pérez',
+      sender_name: 'Diana Pérez',
       sender_country: 'US',
       recipient_name: 'María González',
       recipient_country: 'NI',
@@ -104,7 +104,7 @@ const mockRemittancesData = {
       status: 'completed',
       created_at: new Date().toISOString(),
       source_flag: '🇺🇸',
-      destination_flag: '🇳🇮',
+      destination_flag: '🇭🇳',
       tracking_url: 'https://example.com/track/REM-001',
     },
     // Más datos mock aquí...
@@ -125,7 +125,7 @@ const mockStats = {
   popular_corridors: [
     {
       flag_from: '🇺🇸',
-      flag_to: '🇳🇮',
+      flag_to: '🇭🇳',
       count: 25,
       volume: 125000,
     },

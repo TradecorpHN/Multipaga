@@ -1,179 +1,144 @@
-// middleware.ts
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server';
+import pino from 'pino';
 
-// ✅ Forzar Node.js runtime para compatibilidad
-export const runtime = 'nodejs'
+// Logger
+const logger = pino({
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+});
 
-// Auth cookie key
-const AUTH_COOKIE_KEY = 'hyperswitch_auth'
+// Configuración de rutas
+const PUBLIC_ROUTES = [
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/terms',
+  '/privacy',
+  '/help',
+];
 
-// Public routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/api/health', '/api/auth/login']
+const API_AUTH_ROUTES = [
+  '/api/auth', // Main auth route for Hyperswitch login
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/session',
+  '/api/auth/refresh',
+  '/api/auth/publishable-key',
+];
 
-// API routes
-const API_ROUTES_PREFIX = '/api/'
+const STATIC_ROUTES = [
+  '/_next',
+  '/favicon.ico',
+  '/robots.txt',
+  '/manifest.json',
+  '/sw.js',
+  '/workbox-',
+];
 
-// Simple in-memory rate limiter compatible con TypeScript
-class SimpleRateLimiter {
-  private requests = new Map<string, { count: number; resetTime: number }>()
-  
-  constructor(
-    private maxRequests = 100,
-    private windowMs = 15 * 60 * 1000 // 15 minutes
-  ) {}
-
-  async checkLimit(key: string): Promise<boolean> {
-    const now = Date.now()
-    const record = this.requests.get(key)
-
-    if (!record || now > record.resetTime) {
-      // New window or first request
-      this.requests.set(key, {
-        count: 1,
-        resetTime: now + this.windowMs
-      })
-      return true
-    }
-
-    if (record.count >= this.maxRequests) {
-      return false // Rate limit exceeded
-    }
-
-    record.count++
-    return true
+// Función para verificar si una ruta es pública
+function isPublicRoute(pathname: string, method: string): boolean {
+  // Allow POST to /api/auth explicitly
+  if (method === 'POST' && pathname === '/api/auth') {
+    return true;
   }
-
-  cleanup() {
-    const now = Date.now()
-    // ✅ Usar forEach en lugar de for...of para evitar el error de iteración
-    this.requests.forEach((record, key) => {
-      if (now > record.resetTime) {
-        this.requests.delete(key)
-      }
-    })
-  }
+  return (
+    PUBLIC_ROUTES.some((route) => pathname.startsWith(route)) ||
+    API_AUTH_ROUTES.some((route) => pathname.startsWith(route)) ||
+    STATIC_ROUTES.some((route) => pathname.startsWith(route))
+  );
 }
 
-const rateLimiter = new SimpleRateLimiter()
+// Función para verificar la sesión
+async function verifySessionCookie(sessionCookie: string | undefined): Promise<boolean> {
+  if (!sessionCookie) {
+    return false;
+  }
 
-// Helper to get client IP
-function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for')
-  const real = request.headers.get('x-real-ip')
-  const ip = forwarded?.split(',')[0] || real || '127.0.0.1'
-  return ip.trim()
+  try {
+    const sessionData = JSON.parse(sessionCookie);
+    if (!sessionData.customerId || !sessionData.apiKey || !sessionData.expiresAt) {
+      logger.warn('Invalid session data structure');
+      return false;
+    }
+    if (new Date(sessionData.expiresAt) < new Date()) {
+      logger.warn('Session expired');
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error({ error: error instanceof Error ? error.message : 'Unknown error' }, 'Error parsing session cookie');
+    return false;
+  }
 }
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const { pathname } = request.nextUrl;
+  const method = request.method; // Fix: Get method from request, not request.nextUrl
 
-  // Skip middleware for static files
-  if (
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/static/') ||
-    pathname.includes('.') // Files with extensions
-  ) {
-    return NextResponse.next()
+  // Log para debugging
+  logger.info({ method, pathname }, 'Middleware processing request');
+
+  // Permitir rutas públicas sin verificación
+  if (isPublicRoute(pathname, method)) {
+    logger.debug({ pathname, method }, 'Public route, bypassing session check');
+    return NextResponse.next();
   }
 
-  // Apply rate limiting for API routes
-  if (pathname.startsWith(API_ROUTES_PREFIX)) {
-    const clientIp = getClientIp(request)
-    
-    // Clean up old entries periodically
-    if (Math.random() < 0.01) { // 1% chance
-      rateLimiter.cleanup()
+  // Verificar sesión para rutas protegidas
+  const sessionCookie = request.cookies.get('hyperswitch_session')?.value;
+
+  if (!sessionCookie) {
+    logger.warn({ pathname }, 'No session cookie found, redirecting to login');
+    const loginUrl = new URL('/login', request.url);
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
     }
-    
-    const isAllowed = await rateLimiter.checkLimit(clientIp)
-    
-    if (!isAllowed) {
-      return new NextResponse(
-        JSON.stringify({
-          error: {
-            type: 'rate_limit_exceeded',
-            message: 'Too many requests. Please try again later.',
-            code: 'RATE_LIMIT_EXCEEDED',
-          },
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': '300', // 5 minutes
-          },
-        }
-      )
-    }
-
-    // Add security headers for API responses
-    const response = NextResponse.next()
-    response.headers.set('X-Content-Type-Options', 'nosniff')
-    response.headers.set('X-Frame-Options', 'DENY')
-    response.headers.set('X-XSS-Protection', '1; mode=block')
-    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-
-    // CORS headers for API routes
-    const origin = request.headers.get('origin')
-    const allowedOrigins = [
-      process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-    ]
-
-    if (origin && allowedOrigins.includes(origin)) {
-      response.headers.set('Access-Control-Allow-Origin', origin)
-      response.headers.set('Access-Control-Allow-Credentials', 'true')
-      response.headers.set(
-        'Access-Control-Allow-Methods',
-        'GET, POST, PUT, DELETE, OPTIONS, PATCH'
-      )
-      response.headers.set(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, X-Merchant-Id, X-Profile-Id'
-      )
-    }
-
-    // Handle preflight OPTIONS requests
-    if (request.method === 'OPTIONS') {
-      return new NextResponse(null, { status: 200, headers: response.headers })
-    }
-
-    return response
+    return NextResponse.redirect(loginUrl);
   }
 
-  // Authentication check for dashboard routes
-  if (pathname.startsWith('/dashboard')) {
-    const authCookie = request.cookies.get(AUTH_COOKIE_KEY)
-    
-    if (!authCookie) {
-      return NextResponse.redirect(new URL('/login', request.url))
+  // Verificar validez de la sesión
+  const isValidSession = await verifySessionCookie(sessionCookie);
+  if (!isValidSession) {
+    logger.warn({ pathname }, 'Invalid or expired session, redirecting to login');
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('reason', 'session_expired');
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
     }
-
-    // Add cache headers for authenticated routes
-    const response = NextResponse.next()
-    response.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
-    response.headers.set('Pragma', 'no-cache')
-    response.headers.set('Expires', '0')
-    
-    return response
+    const response = NextResponse.redirect(loginUrl);
+    response.cookies.delete('hyperswitch_session');
+    response.cookies.delete('auth_response');
+    return response;
   }
 
-  // Redirect authenticated users away from login
-  if (pathname === '/login') {
-    const authCookie = request.cookies.get(AUTH_COOKIE_KEY)
-    
-    if (authCookie) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+  // Sesión válida - continuar con la petición
+  logger.info({ pathname }, 'Valid session, proceeding');
+  const response = NextResponse.next();
+
+  // Agregar headers de contexto para APIs si es necesario
+  if (pathname.startsWith('/api/') && !pathname.startsWith('/api/auth/')) {
+    try {
+      const sessionData = JSON.parse(sessionCookie);
+      if (sessionData.customerId) {
+        response.headers.set('x-customer-id', sessionData.customerId);
+      }
+    } catch (error) {
+      logger.warn({ pathname, error }, 'Failed to set API headers');
     }
   }
 
-  return NextResponse.next()
+  return response;
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-    '/api/:path*',
-    '/dashboard/:path*'
-  ]
-}
+    /*
+     * Aplicar middleware a todas las rutas excepto:
+     * - api/auth/* (manejan su propia autenticación)
+     * - _next/static (archivos estáticos)
+     * - _next/image (optimización de imágenes)
+     * - favicon.ico, robots.txt, etc.
+     */
+    '/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.json|sw.js|workbox-).*)',
+  ],
+};

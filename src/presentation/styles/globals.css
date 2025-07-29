@@ -1,437 +1,791 @@
+/* app/globals.css */
+
+/* =============================================================================
+   MULTIPAGA DASHBOARD - GLOBAL STYLES
+   Optimized for financial transaction management interface
+   ============================================================================= */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Root Variables */
+/* =============================================================================
+   CSS CUSTOM PROPERTIES (VARIABLES)
+   ============================================================================= */
 @layer base {
   :root {
-    /* Colors */
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
-
-    --radius: 0.5rem;
-
-    /* Chart colors */
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
-  }
-
-  .dark {
-    /* Dark mode colors */
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Core UI Colors - Multipaga Brand */
+    --background: 210 100% 4%;          /* Deep space blue */
+    --foreground: 210 40% 98%;          /* Near white */
+    
+    --card: 210 100% 6%;                /* Card background */
+    --card-foreground: 210 40% 98%;     /* Card text */
+    
+    --popover: 210 100% 6%;             /* Popover background */
+    --popover-foreground: 210 40% 98%;  /* Popover text */
+    
+    --primary: 195 100% 50%;            /* Cyan primary */
+    --primary-foreground: 210 100% 4%;  /* Primary text */
+    
+    --secondary: 210 40% 15%;           /* Secondary background */
+    --secondary-foreground: 210 40% 98%; /* Secondary text */
+    
+    --muted: 210 40% 10%;               /* Muted background */
+    --muted-foreground: 210 20% 65%;    /* Muted text */
+    
+    --accent: 195 100% 50%;             /* Accent color */
+    --accent-foreground: 210 100% 4%;   /* Accent text */
+    
+    --destructive: 0 84% 60%;           /* Error red */
+    --destructive-foreground: 210 40% 98%; /* Error text */
+    
+    --border: 210 40% 20%;              /* Border color */
+    --input: 210 40% 15%;               /* Input background */
+    --ring: 195 100% 50%;               /* Focus ring */
+    
+    --radius: 0.75rem;                  /* Border radius */
+    
+    /* Multipaga Specific Colors */
+    --multipaga-primary: 195 100% 50%;     /* #00BFFF - Cyan */
+    --multipaga-secondary: 195 100% 75%;   /* #00FFFF - Bright cyan */
+    --multipaga-accent: 270 75% 60%;       /* #8A2BE2 - Blue violet */
+    --multipaga-success: 150 100% 50%;     /* #00FF7F - Spring green */
+    --multipaga-warning: 51 100% 50%;      /* #FFD700 - Gold */
+    --multipaga-error: 348 100% 47%;       /* #FF1493 - Deep pink */
+    
+    /* Financial UI Specific */
+    --transaction-success: 142 76% 36%;    /* #10B981 - Green */
+    --transaction-pending: 45 93% 47%;     /* #F59E0B - Amber */
+    --transaction-failed: 0 84% 60%;       /* #EF4444 - Red */
+    --transaction-processing: 217 91% 60%; /* #3B82F6 - Blue */
+    
+    /* Network Animation Colors */
+    --network-node: 195 100% 50%;          /* Cyan for nodes */
+    --network-connection: 270 75% 60%;     /* Purple for connections */
+    --network-flow: 195 100% 75%;          /* Light cyan for data flow */
+    
+    /* Shadow and Glow Effects */
+    --glow-primary: 195 100% 50%;
+    --glow-secondary: 270 75% 60%;
+    --glow-success: 142 76% 36%;
+    --glow-warning: 45 93% 47%;
+    --glow-error: 0 84% 60%;
   }
 }
 
-/* Custom dark theme colors */
-.dark {
-  --dark-bg: #0f0f23;
-  --dark-surface: #1a1a2e;
-  --dark-border: #252542;
-  --dark-text-primary: #ffffff;
-  --dark-text-secondary: #a0a0c0;
-  --dark-text-muted: #6b6b8c;
-}
-
-/* Base styles */
+/* =============================================================================
+   CSS RESET - ELIMINA TODOS LOS MÁRGENES NO DESEADOS
+   ============================================================================= */
 @layer base {
-  * {
-    @apply border-border;
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0;
   }
-  
+
+  html, body, #__next {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+    background: hsl(210, 100%, 4%);
+    color: hsl(210, 40%, 98%);
+    display: flex;
+    flex-direction: column; /* Asegura header en la parte superior */
+  }
+
+  /* Next.js root container */
+  #__next {
+    height: 100vh !important;
+    width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow-x: hidden;
   }
   
-  /* Dark mode specific */
-  .dark body {
-    background-color: var(--dark-bg);
+  /* Remove default margins from typography */
+  h1, h2, h3, h4, h5, h6,
+  p, blockquote, pre,
+  dl, dd, ol, ul,
+  figure, hr,
+  fieldset, legend {
+    margin: 0;
+    padding: 0;
   }
 }
 
-/* Custom scrollbar */
-@layer utilities {
-  /* Webkit browsers */
+/* =============================================================================
+   DASHBOARD LAYOUT SPECIFIC FIXES
+   Eliminates header margin and overlay issues
+   ============================================================================= */
+@layer base {
+  /* Dashboard container - no margins, perfect fit */
+  .dashboard-container {
+    height: 100vh !important;
+    width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden;
+    display: flex;
+  }
+  
+  /* Sidebar - proper positioning without margin issues */
+  .dashboard-sidebar {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100vh;
+    flex-shrink: 0;
+    width: 16rem; /* 256px */
+    background: linear-gradient(180deg, 
+      hsla(210, 40%, 8%, 0.95) 0%, 
+      hsla(195, 100%, 8%, 0.9) 50%, 
+      hsla(270, 75%, 8%, 0.95) 100%
+    );
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-right: 1px solid hsl(var(--border));
+  }
+  
+  /* Main content - perfect scroll without header interference */
+  .dashboard-main {
+    flex: 1;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: calc(100vw - 16rem); /* Adjusts for sidebar width */
+  }
+  
+  /* Content area with proper scroll */
+  .dashboard-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 1.5rem 0 !important; /* Removed side padding to eliminate margins */
+    height: 0; /* Flex trick for proper overflow */
+    margin: 0 !important;
+    width: 100%;
+  }
+  
+  /* Mobile responsive fixes */
+  @media (max-width: 1024px) {
+    .dashboard-sidebar {
+      position: fixed;
+      z-index: 50;
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    
+    .dashboard-sidebar.open {
+      transform: translateX(0);
+    }
+    
+    .dashboard-content {
+      padding: 1rem 0 !important;
+      width: 100vw !important;
+    }
+    
+    .dashboard-main {
+      width: 100vw !important;
+    }
+  }
+  
+  @media (max-width: 640px) {
+    .dashboard-header {
+      padding: 0.75rem 0 !important;
+    }
+    
+    .dashboard-content {
+      padding: 0.75rem 0 !important;
+    }
+  }
+}
+
+/* =============================================================================
+   HEADER PERFECTO - SIN MÁRGENES, ANCHO AJUSTADO AL LOGO
+   ============================================================================= */
+@layer components {
+  .dashboard-header {
+    width: auto !important; /* Ancho ajustado al contenido */
+    margin: 0 !important;
+    padding: 0.5rem 1rem !important; /* Padding mínimo */
+    position: sticky;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    background: hsla(210, 40%, 8%, 0.9);
+    border-bottom: 1px solid hsl(var(--border));
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: center; /* Centra el logo */
+    align-items: center;
+  }
+
+  .header-content {
+    width: fit-content; /* Ancho exacto del logo */
+    margin: 0 auto; /* Centrado horizontal */
+  }
+}
+
+/* =============================================================================
+   FINANCIAL NETWORK BACKGROUND OPTIMIZATION
+   High-performance animated background for financial theme
+   ============================================================================= */
+@layer base {
+  /* Financial network container */
+  .financial-network-bg {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0.08;
+    z-index: -1;
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+  }
+  
+  /* Network node animations */
+  @keyframes network-pulse {
+    0%, 100% { 
+      opacity: 0.4; 
+      transform: scale(0.8); 
+    }
+    50% { 
+      opacity: 0.8; 
+      transform: scale(1.2); 
+    }
+  }
+  
+  @keyframes network-flow {
+    0% { 
+      stroke-dashoffset: 0; 
+      opacity: 0; 
+    }
+    25% { 
+      opacity: 0.6; 
+    }
+    75% { 
+      opacity: 0.6; 
+    }
+    100% { 
+      stroke-dashoffset: -50; 
+      opacity: 0; 
+    }
+  }
+  
+  @keyframes data-stream {
+    0% { 
+      transform: translateY(100vh) translateX(-50px); 
+      opacity: 0; 
+    }
+    10% { 
+      opacity: 0.6; 
+    }
+    90% { 
+      opacity: 0.6; 
+    }
+    100% { 
+      transform: translateY(-100vh) translateX(50px); 
+      opacity: 0; 
+    }
+  }
+  
+  /* Animation classes for network elements */
+  .network-node {
+    animation: network-pulse 3s ease-in-out infinite;
+  }
+  
+  .network-flow {
+    animation: network-flow 4s linear infinite;
+  }
+  
+  .data-stream {
+    animation: data-stream 8s linear infinite;
+  }
+}
+
+/* =============================================================================
+   CUSTOM SCROLLBARS - MULTIPAGA THEMED
+   ============================================================================= */
+@layer base {
+  /* Webkit browsers (Chrome, Safari, Edge) */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
-
+  
   ::-webkit-scrollbar-track {
-    @apply bg-muted;
+    background: hsla(210, 40%, 10%, 0.5);
+    border-radius: 4px;
   }
-
+  
   ::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/30 rounded-full;
+    background: linear-gradient(135deg, 
+      hsla(195, 100%, 50%, 0.6), 
+      hsla(270, 75%, 60%, 0.6)
+    );
+    border-radius: 4px;
+    border: 1px solid hsla(195, 100%, 50%, 0.3);
+    transition: background 0.3s ease;
   }
-
+  
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/50;
+    background: linear-gradient(135deg, 
+      hsla(195, 100%, 50%, 0.8), 
+      hsla(270, 75%, 60%, 0.8)
+    );
   }
-
+  
   /* Firefox */
   * {
     scrollbar-width: thin;
-    scrollbar-color: theme('colors.muted-foreground.DEFAULT') theme('colors.muted.DEFAULT');
+    scrollbar-color: hsla(195, 100%, 50%, 0.6) hsla(210, 40%, 10%, 0.5);
   }
 }
 
-/* Animations */
-@layer utilities {
-  /* Fade animations */
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+/* =============================================================================
+   FINANCIAL UI COMPONENTS
+   Specialized components for transaction management
+   ============================================================================= */
+@layer components {
+  /* Transaction status indicators */
+  .transaction-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border: 1px solid;
+    margin: 0 !important;
+    padding: 0.25rem 0.75rem !important;
   }
-
-  @keyframes fade-out {
-    from {
-      opacity: 1;
-    }
-    to {
-      opacity: 0;
-    }
+  
+  .transaction-status.success {
+    background-color: hsla(142, 76%, 36%, 0.1);
+    border-color: hsla(142, 76%, 36%, 0.3);
+    color: hsl(142, 76%, 60%);
   }
-
-  /* Slide animations */
-  @keyframes slide-in-from-right {
-    from {
-      transform: translateX(100%);
-    }
-    to {
-      transform: translateX(0);
-    }
+  
+  .transaction-status.pending {
+    background-color: hsla(45, 93%, 47%, 0.1);
+    border-color: hsla(45, 93%, 47%, 0.3);
+    color: hsl(45, 93%, 70%);
   }
-
-  @keyframes slide-in-from-left {
-    from {
-      transform: translateX(-100%);
-    }
-    to {
-      transform: translateX(0);
-    }
+  
+  .transaction-status.failed {
+    background-color: hsla(0, 84%, 60%, 0.1);
+    border-color: hsla(0, 84%, 60%, 0.3);
+    color: hsl(0, 84%, 70%);
   }
-
-  @keyframes slide-in-from-top {
-    from {
-      transform: translateY(-100%);
-    }
-    to {
-      transform: translateY(0);
-    }
+  
+  .transaction-status.processing {
+    background-color: hsla(217, 91%, 60%, 0.1);
+    border-color: hsla(217, 91%, 60%, 0.3);
+    color: hsl(217, 91%, 70%);
   }
-
-  @keyframes slide-in-from-bottom {
-    from {
-      transform: translateY(100%);
-    }
-    to {
-      transform: translateY(0);
-    }
+  
+  /* Multipaga branded cards */
+  .multipaga-card {
+    background: linear-gradient(135deg, 
+      hsla(255, 255, 255, 0.1) 0%, 
+      hsla(195, 100%, 50%, 0.05) 25%, 
+      hsla(270, 75%, 60%, 0.05) 75%, 
+      hsla(255, 255, 255, 0.05) 100%
+    );
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid hsla(195, 100%, 50%, 0.2);
+    border-radius: 1rem;
+    transition: all 0.3s ease;
+    margin: 0 !important;
+    padding: 0 !important;
   }
-
-  /* Scale animations */
-  @keyframes scale-in {
-    from {
-      transform: scale(0.95);
-      opacity: 0;
-    }
-    to {
-      transform: scale(1);
-      opacity: 1;
-    }
+  
+  .multipaga-card:hover {
+    background: linear-gradient(135deg, 
+      hsla(255, 255, 255, 0.15) 0%, 
+      hsla(195, 100%, 50%, 0.1) 25%, 
+      hsla(270, 75%, 60%, 0.1) 75%, 
+      hsla(255, 255, 255, 0.1) 100%
+    );
+    border-color: hsla(195, 100%, 50%, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 10px 15px -3px hsla(195, 100%, 50%, 0.1),
+      0 4px 6px -2px hsla(270, 75%, 60%, 0.05),
+      0 0 30px hsla(195, 100%, 50%, 0.15);
   }
-
-  @keyframes scale-out {
-    from {
-      transform: scale(1);
-      opacity: 1;
-    }
-    to {
-      transform: scale(0.95);
-      opacity: 0;
-    }
+  
+  /* Financial metric display */
+  .financial-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.5rem;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, 
+      hsla(195, 100%, 50%, 0.1) 0%, 
+      hsla(270, 75%, 60%, 0.05) 100%
+    );
+    border: 1px solid hsla(195, 100%, 50%, 0.2);
+    position: relative;
+    overflow: hidden;
+    margin: 0 !important;
+    padding: 1.5rem !important;
   }
-
-  /* Pulse animation */
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
+  
+  .financial-metric::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, 
+      transparent, 
+      hsla(195, 100%, 50%, 0.6), 
+      transparent
+    );
+    animation: metric-shine 3s ease-in-out infinite;
   }
-
-  /* Spin animation */
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+  
+  @keyframes metric-shine {
+    0% { left: -100%; }
+    50% { left: 100%; }
+    100% { left: 100%; }
   }
-
-  /* Bounce animation */
-  @keyframes bounce {
-    0%, 100% {
-      transform: translateY(-25%);
-      animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
-    }
-    50% {
-      transform: translateY(0);
-      animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-    }
+  
+  /* Connector status indicators */
+  .connector-status {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    margin: 0 !important;
+    padding: 0.5rem 1rem !important;
   }
-
-  /* Animation classes */
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-out;
+  
+  .connector-status.active {
+    background-color: hsla(142, 76%, 36%, 0.2);
+    border: 1px solid hsla(142, 76%, 36%, 0.4);
+    color: hsl(142, 76%, 70%);
   }
-
-  .animate-fade-out {
-    animation: fade-out 0.3s ease-out;
+  
+  .connector-status.inactive {
+    background-color: hsla(0, 84%, 60%, 0.2);
+    border: 1px solid hsla(0, 84%, 60%, 0.4);
+    color: hsl(0, 84%, 70%);
   }
-
-  .animate-slide-in-from-right {
-    animation: slide-in-from-right 0.3s ease-out;
+  
+  .connector-status::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: currentColor;
+    animation: status-pulse 2s ease-in-out infinite;
   }
-
-  .animate-slide-in-from-left {
-    animation: slide-in-from-left 0.3s ease-out;
-  }
-
-  .animate-slide-in-from-top {
-    animation: slide-in-from-top 0.3s ease-out;
-  }
-
-  .animate-slide-in-from-bottom {
-    animation: slide-in-from-bottom 0.3s ease-out;
-  }
-
-  .animate-scale-in {
-    animation: scale-in 0.2s ease-out;
-  }
-
-  .animate-scale-out {
-    animation: scale-out 0.2s ease-out;
+  
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.1); }
   }
 }
 
-/* Custom utility classes */
+/* =============================================================================
+   ADVANCED ANIMATIONS & EFFECTS
+   Optimized for performance and financial UI context
+   ============================================================================= */
 @layer utilities {
-  /* Glow effect */
-  .shadow-glow {
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+  /* Loading animations */
+  @keyframes multipaga-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
-
-  .shadow-glow-lg {
-    box-shadow: 0 0 40px rgba(139, 92, 246, 0.6);
+  
+  @keyframes multipaga-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
-
-  /* Gradient text */
-  .gradient-text {
-    @apply bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent;
+  
+  @keyframes multipaga-bounce {
+    0%, 100% { 
+      transform: translateY(-25%); 
+      animation-timing-function: cubic-bezier(0.8, 0, 1, 1); 
+    }
+    50% { 
+      transform: translateY(0); 
+      animation-timing-function: cubic-bezier(0, 0, 0.2, 1); 
+    }
   }
-
-  /* Glass morphism */
-  .glass {
-    @apply bg-white/10 backdrop-blur-lg border border-white/20;
+  
+  @keyframes shimmer-loading {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
   }
-
-  .glass-dark {
-    @apply bg-black/20 backdrop-blur-lg border border-white/10;
+  
+  /* Glow effects for financial emphasis */
+  .glow-primary {
+    box-shadow: 
+      0 0 20px hsla(195, 100%, 50%, 0.3),
+      0 0 40px hsla(195, 100%, 50%, 0.1),
+      0 0 80px hsla(195, 100%, 50%, 0.05);
   }
-
-  /* Custom focus styles */
-  .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+  
+  .glow-success {
+    box-shadow: 
+      0 0 20px hsla(142, 76%, 36%, 0.3),
+      0 0 40px hsla(142, 76%, 36%, 0.1);
   }
+  
+  .glow-warning {
+    box-shadow: 
+      0 0 20px hsla(45, 93%, 47%, 0.3),
+      0 0 40px hsla(45, 93%, 47%, 0.1);
+  }
+  
+  .glow-error {
+    box-shadow: 
+      0 0 20px hsla(0, 84%, 60%, 0.3),
+      0 0 40px hsla(0, 84%, 60%, 0.1);
+  }
+  
+  /* Performance optimized animation classes */
+  .animate-spin-slow {
+    animation: multipaga-spin 3s linear infinite;
+  }
+  
+  .animate-pulse-slow {
+    animation: multipaga-pulse 3s ease-in-out infinite;
+  }
+  
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsla(255, 255, 255, 0.1) 25%,
+      hsla(255, 255, 255, 0.2) 50%,
+      hsla(255, 255, 255, 0.1) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer-loading 1.5s infinite;
+  }
+  
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .financial-network-bg,
+    .animate-spin-slow,
+    .animate-pulse-slow,
+    .animate-shimmer,
+    .network-node,
+    .network-flow,
+    .data-stream {
+      animation: none !important;
+    }
+    
+    * {
+      transition: none !important;
+    }
+  }
+}
 
+/* =============================================================================
+   UTILITY CLASSES - MULTIPAGA SPECIFIC
+   ============================================================================= */
+@layer utilities {
+  /* Layout utilities */
+  .full-height { height: 100vh !important; }
+  .full-width { width: 100vw !important; }
+  .no-margin { margin: 0 !important; }
+  .no-padding { padding: 0 !important; }
+  .no-overflow-x { overflow-x: hidden !important; }
+  
+  /* Text utilities for financial data */
+  .text-financial-positive { color: hsl(142, 76%, 60%); }
+  .text-financial-negative { color: hsl(0, 84%, 70%); }
+  .text-financial-neutral { color: hsl(210, 20%, 65%); }
+  
+  .font-mono-tabular {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.025em;
+  }
+  
+  /* Background utilities */
+  .bg-multipaga-gradient {
+    background: linear-gradient(135deg, 
+      hsl(210, 100%, 4%) 0%, 
+      hsl(195, 100%, 15%) 25%, 
+      hsl(270, 75%, 15%) 75%, 
+      hsl(210, 100%, 4%) 100%
+    );
+  }
+  
+  .bg-glass {
+    background-color: hsla(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid hsla(255, 255, 255, 0.2);
+  }
+  
+  .bg-glass-dark {
+    background-color: hsla(0, 0%, 0%, 0.2);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid hsla(255, 255, 255, 0.1);
+  }
+  
+  /* Focus and interaction states */
+  .focus-multipaga {
+    outline: none;
+    ring: 2px solid hsla(195, 100%, 50%, 0.5);
+    ring-offset: 2px;
+    ring-offset-color: hsl(210, 100%, 4%);
+  }
+  
   /* Hide scrollbar */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  .no-scrollbar {
+  .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-
-  /* Truncate with lines */
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Line clamping with standard property support */
+  .line-clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-
+  
   .line-clamp-3 {
     display: -webkit-box;
     -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .line-clamp-4 {
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
+    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
 }
 
-/* Component specific styles */
-@layer components {
-  /* Card hover effects */
-  .card-hover {
-    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+/* =============================================================================
+   RESPONSIVE DESIGN - MOBILE FIRST
+   ============================================================================= */
+@media (max-width: 640px) {
+  .dashboard-header {
+    padding: 0.75rem 0 !important;
   }
-
-  /* Button loading state */
-  .btn-loading {
-    @apply relative text-transparent pointer-events-none;
+  
+  .financial-metric {
+    padding: 1rem;
   }
-
-  .btn-loading::after {
-    @apply absolute inset-0 flex items-center justify-center;
-    content: '';
-    animation: spin 1s linear infinite;
-  }
-
-  /* Input error state */
-  .input-error {
-    @apply border-destructive focus:ring-destructive;
-  }
-
-  /* Table hover state */
-  .table-hover tbody tr:hover {
-    @apply bg-muted/50;
-  }
-
-  /* Status indicators */
-  .status-dot {
-    @apply w-2 h-2 rounded-full;
-  }
-
-  .status-dot-success {
-    @apply bg-green-500;
-  }
-
-  .status-dot-warning {
-    @apply bg-yellow-500;
-  }
-
-  .status-dot-error {
-    @apply bg-red-500;
-  }
-
-  .status-dot-info {
-    @apply bg-blue-500;
+  
+  .transaction-status {
+    font-size: 0.6875rem;
+    padding: 0.125rem 0.5rem;
   }
 }
 
-/* Print styles */
+@media (max-width: 480px) {
+  .dashboard-content {
+    padding: 0.5rem 0 !important;
+  }
+  
+  .multipaga-card {
+    border-radius: 0.75rem;
+  }
+  
+  .financial-metric {
+    padding: 0.75rem;
+  }
+}
+
+/* =============================================================================
+   PRINT STYLES
+   ============================================================================= */
 @media print {
-  body {
-    @apply bg-white text-black;
-  }
-
-  .no-print {
+  .dashboard-header,
+  .dashboard-sidebar,
+  .financial-network-bg {
     display: none !important;
   }
-
-  .page-break {
-    page-break-after: always;
+  
+  .dashboard-main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  .multipaga-card {
+    background: white !important;
+    border: 1px solid #000 !important;
+    break-inside: avoid;
+  }
+  
+  .transaction-status {
+    border: 1px solid #000 !important;
+    background: transparent !important;
+    color: #000 !important;
   }
 }
 
-/* Custom Tailwind utilities for dark mode */
-@layer utilities {
-  .bg-dark-bg {
-    background-color: var(--dark-bg);
+/* =============================================================================
+   HIGH CONTRAST MODE SUPPORT
+   ============================================================================= */
+@media (prefers-contrast: high) {
+  .multipaga-card {
+    border-width: 2px;
   }
-
-  .bg-dark-surface {
-    background-color: var(--dark-surface);
+  
+  .transaction-status {
+    border-width: 2px;
+    font-weight: 600;
   }
-
-  .border-dark-border {
-    border-color: var(--dark-border);
+  
+  .connector-status {
+    border-width: 2px;
   }
+}
 
-  .text-dark-text-primary {
-    color: var(--dark-text-primary);
-  }
-
-  .text-dark-text-secondary {
-    color: var(--dark-text-secondary);
-  }
-
-  .text-dark-text-muted {
-    color: var(--dark-text-muted);
+/* =============================================================================
+   DARK MODE SPECIFICS (Already optimized for dark theme)
+   ============================================================================= */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
   }
 }

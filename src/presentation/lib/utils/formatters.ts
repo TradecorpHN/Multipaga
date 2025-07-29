@@ -1,208 +1,420 @@
-import { format, formatDistance, formatRelative, parseISO } from 'date-fns'
+// src/presentation/lib/utils/formatters.ts
+// Utilidades de formateo completas para la aplicación Multipaga
+
+import { format, formatDistance, formatRelative, parseISO, isValid, type Locale } from 'date-fns'
 import { es } from 'date-fns/locale'
 
-// Currency formatter
+// ================================
+// FORMATEO DE MONEDA
+// ================================
+
+interface CurrencyOptions {
+  currency?: string
+  locale?: string
+  compact?: boolean
+  showCurrency?: boolean
+  minimumFractionDigits?: number
+  maximumFractionDigits?: number
+}
+
 export function formatCurrency(
-  amount: number,
-  currency: string = 'USD',
-  locale: string = 'en-US'
+  amount: number, 
+  currency: string = 'HNL',
+  options: CurrencyOptions = {}
 ): string {
+  const {
+    locale = 'es-HN',
+    compact = false,
+    showCurrency = true,
+    minimumFractionDigits = 2,
+    maximumFractionDigits = 2,
+  } = options
+
   try {
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount)
+    const formatter = new Intl.NumberFormat(locale, {
+      style: showCurrency ? 'currency' : 'decimal',
+      currency: showCurrency ? currency : undefined,
+      notation: compact ? 'compact' : 'standard',
+      minimumFractionDigits,
+      maximumFractionDigits,
+    })
+
+    return formatter.format(amount)
   } catch (error) {
-    // Fallback for unsupported currencies
-    return `${currency.toUpperCase()} ${amount.toFixed(2)}`
+    console.warn('Error formatting currency:', error)
+    return `${currency} ${amount.toFixed(2)}`
   }
 }
 
-// Number formatter
+// Formateo específico para Honduras
+export function formatHNLCurrency(amount: number, compact: boolean = false): string {
+  return formatCurrency(amount, 'HNL', { 
+    locale: 'es-HN', 
+    compact,
+    showCurrency: true 
+  })
+}
+
+// Formateo para USD
+export function formatUSDCurrency(amount: number, compact: boolean = false): string {
+  return formatCurrency(amount, 'USD', { 
+    locale: 'en-US', 
+    compact,
+    showCurrency: true 
+  })
+}
+
+// ================================
+// FORMATEO DE NÚMEROS
+// ================================
+
+interface NumberOptions {
+  locale?: string
+  compact?: boolean
+  notation?: 'standard' | 'scientific' | 'engineering' | 'compact'
+  minimumFractionDigits?: number
+  maximumFractionDigits?: number
+}
+
 export function formatNumber(
   value: number,
-  options?: Intl.NumberFormatOptions,
-  locale: string = 'en-US'
+  options: NumberOptions = {}
 ): string {
-  return new Intl.NumberFormat(locale, options).format(value)
+  const {
+    locale = 'es-HN',
+    compact = false,
+    notation = compact ? 'compact' : 'standard',
+    minimumFractionDigits = 0,
+    maximumFractionDigits = 2,
+  } = options
+
+  try {
+    const formatter = new Intl.NumberFormat(locale, {
+      notation,
+      minimumFractionDigits,
+      maximumFractionDigits,
+    })
+
+    return formatter.format(value)
+  } catch (error) {
+    console.warn('Error formatting number:', error)
+    return value.toString()
+  }
 }
 
-// Percentage formatter
+// Formateo de porcentajes
 export function formatPercentage(
   value: number,
-  decimals: number = 1,
-  locale: string = 'en-US'
+  options: { locale?: string; minimumFractionDigits?: number; maximumFractionDigits?: number } = {}
 ): string {
-  return new Intl.NumberFormat(locale, {
-    style: 'percent',
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(value / 100)
+  const {
+    locale = 'es-HN',
+    minimumFractionDigits = 1,
+    maximumFractionDigits = 2,
+  } = options
+
+  try {
+    const formatter = new Intl.NumberFormat(locale, {
+      style: 'percent',
+      minimumFractionDigits,
+      maximumFractionDigits,
+    })
+
+    return formatter.format(value / 100)
+  } catch (error) {
+    console.warn('Error formatting percentage:', error)
+    return `${value.toFixed(1)}%`
+  }
 }
 
-// Date formatters
+// Formateo compacto de números grandes
+export function formatCompactNumber(value: number): string {
+  return formatNumber(value, { compact: true })
+}
+
+// ================================
+// FORMATEO DE FECHAS
+// ================================
+
+interface DateFormatOptions {
+  locale?: Locale
+  includeTime?: boolean
+  format?: string
+  relative?: boolean
+  distance?: boolean
+}
+
 export function formatDate(
-  date: string | Date,
-  formatStr: string = 'PP',
-  locale: any = undefined
+  date: string | Date | number,
+  options: DateFormatOptions = {}
 ): string {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date
-  return format(dateObj, formatStr, { locale })
+  const {
+    locale = es,
+    includeTime = false,
+    format: customFormat,
+    relative = false,
+    distance = false,
+  } = options
+
+  try {
+    let parsedDate: Date
+
+    if (typeof date === 'string') {
+      parsedDate = parseISO(date)
+    } else if (typeof date === 'number') {
+      parsedDate = new Date(date)
+    } else {
+      parsedDate = date
+    }
+
+    if (!isValid(parsedDate)) {
+      return 'Fecha inválida'
+    }
+
+    if (relative) {
+      return formatRelative(parsedDate, new Date(), { locale })
+    }
+
+    if (distance) {
+      return formatDistance(parsedDate, new Date(), { locale, addSuffix: true })
+    }
+
+    if (customFormat) {
+      return format(parsedDate, customFormat, { locale })
+    }
+
+    const defaultFormat = includeTime ? 'PPp' : 'PP'
+    return format(parsedDate, defaultFormat, { locale })
+  } catch (error) {
+    console.warn('Error formatting date:', error)
+    return 'Fecha inválida'
+  }
 }
 
+// Formateo específico de fecha y hora
 export function formatDateTime(
-  date: string | Date,
-  formatStr: string = 'PPpp',
-  locale: any = undefined
+  date: string | Date | number,
+  options: DateFormatOptions = {}
 ): string {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date
-  return format(dateObj, formatStr, { locale })
+  return formatDate(date, { ...options, includeTime: true })
 }
 
-export function formatRelativeTime(
-  date: string | Date,
-  baseDate: Date = new Date(),
-  locale: any = undefined
-): string {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date
-  return formatRelative(dateObj, baseDate, { locale })
+// Formateo de fecha corta (dd/MM/yyyy)
+export function formatShortDate(date: string | Date | number): string {
+  return formatDate(date, { format: 'dd/MM/yyyy' })
 }
 
-export function formatDistanceFromNow(
-  date: string | Date,
-  options?: { addSuffix?: boolean; locale?: any }
-): string {
-  const dateObj = typeof date === 'string' ? parseISO(date) : date
-  return formatDistance(dateObj, new Date(), options)
+// Formateo de fecha larga (ej: 15 de julio de 2025)
+export function formatLongDate(date: string | Date | number): string {
+  return formatDate(date, { format: 'PPP' })
 }
 
-// File size formatter
-export function formatFileSize(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = bytes
-  let unitIndex = 0
-
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex++
-  }
-
-  return `${size.toFixed(unitIndex > 0 ? 2 : 0)} ${units[unitIndex]}`
+// Formateo de hora (HH:mm)
+export function formatTime(date: string | Date | number): string {
+  return formatDate(date, { format: 'HH:mm' })
 }
 
-// Status formatter
-export function formatPaymentStatus(status: string): string {
-  const statusMap: Record<string, string> = {
-    succeeded: 'Successful',
-    processing: 'Processing',
-    requires_payment_method: 'Awaiting Payment Method',
-    requires_confirmation: 'Awaiting Confirmation',
-    requires_action: 'Action Required',
-    requires_capture: 'Awaiting Capture',
-    cancelled: 'Cancelled',
-    failed: 'Failed',
-  }
-
-  return statusMap[status] || status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+// Formateo de fecha y hora completa (dd/MM/yyyy HH:mm)
+export function formatFullDateTime(date: string | Date | number): string {
+  return formatDate(date, { format: 'dd/MM/yyyy HH:mm' })
 }
 
-// Payment method formatter
-export function formatPaymentMethod(method: string): string {
-  const methodMap: Record<string, string> = {
-    card: 'Card',
-    bank_transfer: 'Bank Transfer',
-    bank_debit: 'Bank Debit',
-    wallet: 'Digital Wallet',
-    pay_later: 'Buy Now Pay Later',
-    bank_redirect: 'Bank Redirect',
-    crypto: 'Cryptocurrency',
-    upi: 'UPI',
-    voucher: 'Voucher',
-    gift_card: 'Gift Card',
-    open_banking: 'Open Banking',
-  }
-
-  return methodMap[method] || method.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+// Formateo relativo (hace 2 horas, ayer, etc.)
+export function formatRelativeDate(date: string | Date | number): string {
+  return formatDate(date, { relative: true })
 }
 
-// Card number formatter (masks all but last 4 digits)
-export function formatCardNumber(cardNumber: string): string {
-  if (!cardNumber || cardNumber.length < 4) return '****'
-  
-  const last4 = cardNumber.slice(-4)
-  return `**** **** **** ${last4}`
+// Formateo de distancia (hace 2 horas, en 3 días, etc.)
+export function formatDistanceDate(date: string | Date | number): string {
+  return formatDate(date, { distance: true })
 }
 
-// Phone number formatter
-export function formatPhoneNumber(phone: string): string {
-  // Remove all non-digits
-  const cleaned = phone.replace(/\D/g, '')
-  
-  // Format based on length
-  if (cleaned.length === 10) {
-    // US format: (123) 456-7890
-    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`
-  } else if (cleaned.length === 11 && cleaned[0] === '1') {
-    // US format with country code: +1 (123) 456-7890
-    return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`
-  }
-  
-  // Return original if format is unknown
-  return phone
-}
+// ================================
+// FORMATEO DE TEXTOS
+// ================================
 
-// Transaction ID formatter
-export function formatTransactionId(id: string, showFull: boolean = false): string {
-  if (!id) return ''
-  
-  if (showFull || id.length <= 12) {
-    return id
-  }
-  
-  // Show first 6 and last 4 characters
-  return `${id.slice(0, 6)}...${id.slice(-4)}`
-}
-
-// Amount formatter for input fields
-export function formatAmountForInput(amount: number): string {
-  return (amount / 100).toFixed(2)
-}
-
-// Parse amount from input (convert to cents)
-export function parseAmountFromInput(value: string): number {
-  const parsed = parseFloat(value.replace(/[^0-9.-]+/g, ''))
-  return Math.round((parsed || 0) * 100)
-}
-
-// Duration formatter
-export function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${secs}s`
-  } else if (minutes > 0) {
-    return `${minutes}m ${secs}s`
-  } else {
-    return `${secs}s`
-  }
-}
-
-// Capitalize first letter
+// Capitalizar primera letra
 export function capitalize(str: string): string {
+  if (!str) return ''
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
 }
 
-// Truncate text
-export function truncate(str: string, length: number = 50): string {
-  if (str.length <= length) return str
-  return str.slice(0, length) + '...'
+// Formateo de nombres propios
+export function formatName(name: string): string {
+  if (!name) return ''
+  return name
+    .split(' ')
+    .map(word => capitalize(word))
+    .join(' ')
 }
 
-// Pluralize
-export function pluralize(count: number, singular: string, plural?: string): string {
-  return count === 1 ? singular : (plural || `${singular}s`)
+// Truncar texto con elipsis
+export function truncateText(text: string, maxLength: number): string {
+  if (!text || text.length <= maxLength) return text
+  return text.substring(0, maxLength).trim() + '...'
 }
+
+// Formateo de ID de pagos (mostrar solo los primeros y últimos caracteres)
+export function formatPaymentId(paymentId: string, showChars: number = 8): string {
+  if (!paymentId || paymentId.length <= showChars * 2) return paymentId
+  
+  const start = paymentId.substring(0, showChars)
+  const end = paymentId.substring(paymentId.length - showChars)
+  return `${start}...${end}`
+}
+
+// ================================
+// FORMATEO DE TAMAÑOS
+// ================================
+
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes'
+
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// ================================
+// FORMATEO DE CÓDIGOS
+// ================================
+
+// Formatear códigos de error
+export function formatErrorCode(code: string | number): string {
+  return `ERR_${String(code).padStart(4, '0')}`
+}
+
+// Formatear códigos de transacción
+export function formatTransactionCode(code: string): string {
+  if (!code) return ''
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '')
+}
+
+// ================================
+// FORMATEO DE ESTADOS
+// ================================
+
+interface StatusConfig {
+  [key: string]: {
+    label: string
+    color: string
+    bgColor: string
+    icon?: string
+  }
+}
+
+const PAYMENT_STATUS_CONFIG: StatusConfig = {
+  succeeded: {
+    label: 'Exitoso',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+  },
+  failed: {
+    label: 'Fallido',
+    color: 'text-red-700',
+    bgColor: 'bg-red-100',
+  },
+  processing: {
+    label: 'Procesando',
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-100',
+  },
+  requires_payment_method: {
+    label: 'Requiere método de pago',
+    color: 'text-yellow-700',
+    bgColor: 'bg-yellow-100',
+  },
+  requires_confirmation: {
+    label: 'Requiere confirmación',
+    color: 'text-orange-700',
+    bgColor: 'bg-orange-100',
+  },
+  requires_action: {
+    label: 'Requiere acción',
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-100',
+  },
+  cancelled: {
+    label: 'Cancelado',
+    color: 'text-gray-700',
+    bgColor: 'bg-gray-100',
+  },
+  captured: {
+    label: 'Capturado',
+    color: 'text-green-700',
+    bgColor: 'bg-green-100',
+  },
+  partially_captured: {
+    label: 'Parcialmente capturado',
+    color: 'text-yellow-700',
+    bgColor: 'bg-yellow-100',
+  },
+}
+
+export function formatPaymentStatus(status: string): {
+  label: string
+  color: string
+  bgColor: string
+} {
+  const config = PAYMENT_STATUS_CONFIG[status] || {
+    label: capitalize(status.replace('_', ' ')),
+    color: 'text-gray-700',
+    bgColor: 'bg-gray-100',
+  }
+
+  return config
+}
+
+// ================================
+// FORMATEO DE VALIDACIONES
+// ================================
+
+export function formatValidationError(error: any): string {
+  if (typeof error === 'string') return error
+  if (error?.message) return error.message
+  if (Array.isArray(error) && error.length > 0) {
+    return error[0]?.message || 'Error de validación'
+  }
+  return 'Error de validación desconocido'
+}
+
+// ================================
+// FORMATEO DE URLs
+// ================================
+
+export function formatApiUrl(path: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  return `${baseUrl}/api${cleanPath}`
+}
+
+// ================================
+// EXPORTACIONES ADICIONALES
+// ================================
+
+// Objeto con todos los formateadores para fácil importación
+export const formatters = {
+  currency: formatCurrency,
+  number: formatNumber,
+  percentage: formatPercentage,
+  date: formatDate,
+  dateTime: formatDateTime,
+  shortDate: formatShortDate,
+  longDate: formatLongDate,
+  time: formatTime,
+  fullDateTime: formatFullDateTime,
+  relativeDate: formatRelativeDate,
+  distanceDate: formatDistanceDate,
+  name: formatName,
+  paymentId: formatPaymentId,
+  fileSize: formatFileSize,
+  errorCode: formatErrorCode,
+  transactionCode: formatTransactionCode,
+  paymentStatus: formatPaymentStatus,
+  validationError: formatValidationError,
+  apiUrl: formatApiUrl,
+}
+
+export default formatters

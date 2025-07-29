@@ -1,555 +1,525 @@
 // src/presentation/hooks/useRefunds.ts
-// ──────────────────────────────────────────────────────────────────────────────
-// useRefunds Hook - Gestión avanzada de reembolsos para Multipaga (Enterprise Ready)
-// ──────────────────────────────────────────────────────────────────────────────
+// Hook completo para gestión de reembolsos con Hyperswitch API
+import { useState, useCallback, useEffect } from 'react'
+import { useAuth } from '@/presentation/contexts/AuthContext'
+import toast from 'react-hot-toast'
+import { z } from 'zod'
 
-import { useState, useCallback, useMemo } from 'react'
-import useSWR from 'swr'
-import { toast } from 'react-hot-toast'
-import { internalApi, MultipagaApiError } from '../lib/axios-config'
-import { useDebounce } from './useDebounce'
-import type {
-  RefundFilters,
-  RefundSortOptions,
-  PaginationOptions,
-  CreateRefundParams,
-  UpdateRefundParams,
-  RefundStatistics,
-  RefundPolicyConfig
-} from '../../domain/repositories/IRefundRepository'
-import type { RefundData } from '../../domain/entities/Refund'
+// ======================================================================
+// SCHEMAS DE VALIDACIÓN - Basados en documentación Hyperswitch
+// ======================================================================
 
-/** Utilidad universal: convierte rangos y objetos en filtros planos para queries */
-function toApiFilters(filters: Record<string, any>): Record<string, any> {
-  const out: Record<string, any> = {}
-  for (const [key, value] of Object.entries(filters)) {
-    if (
-      value &&
-      typeof value === 'object' &&
-      ('start' in value || 'end' in value)
-    ) {
-      if (value.start) out[`${key}_start`] = value.start
-      if (value.end) out[`${key}_end`] = value.end
-    } else if (value !== undefined) {
-      out[key] = value
+const RefundSchema = z.object({
+  refund_id: z.string(),
+  payment_id: z.string(),
+  merchant_id: z.string().optional(),
+  status: z.enum([
+    'pending',
+    'succeeded', 
+    'failed',
+    'review',
+    'manual_review'
+  ]),
+  amount: z.number(),
+  currency: z.string(),
+  reason: z.enum([
+    'duplicate',
+    'fraudulent', 
+    'requested_by_customer',
+    'subscription_canceled',
+    'product_unsatisfactory',
+    'product_not_received',
+    'unrecognized',
+    'credit_not_processed',
+    'general',
+    'processing_error'
+  ]).optional(),
+  created: z.string(),
+  updated: z.string().optional(),
+  description: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+  connector: z.string().optional(),
+  connector_refund_id: z.string().optional(),
+  error_code: z.string().optional(),
+  error_message: z.string().optional(),
+  profile_id: z.string().optional(),
+  merchant_refund_id: z.string().optional(),
+})
+
+// Schema flexible para respuestas de listado
+const RefundListResponseSchema = z.union([
+  // Formato estándar de Hyperswitch
+  z.object({
+    data: z.array(RefundSchema),
+    size: z.number().optional(),
+    count: z.number().optional(),
+    has_more: z.boolean().optional(),
+    total_count: z.number().optional(),
+  }),
+  // Formato directo como array (fallback)
+  z.array(RefundSchema),
+]).transform((data) => {
+  if (Array.isArray(data)) {
+    return {
+      data: data,
+      size: data.length,
+      count: data.length,
+      has_more: false,
+      total_count: data.length,
     }
   }
-  return out
+  
+  return {
+    data: data.data || [],
+    size: data.size || data.data?.length || 0,
+    count: data.count || data.data?.length || 0,
+    has_more: data.has_more || false,
+    total_count: data.total_count || data.count || data.data?.length || 0,
+  }
+})
+
+const RefundCreateRequestSchema = z.object({
+  payment_id: z.string().min(1, 'Payment ID is required'),
+  amount: z.number().int().min(1).optional(), // Si no se especifica, reembolso total
+  reason: z.enum([
+    'duplicate',
+    'fraudulent', 
+    'requested_by_customer',
+    'subscription_canceled',
+    'product_unsatisfactory',
+    'product_not_received',
+    'unrecognized',
+    'credit_not_processed',
+    'general',
+    'processing_error'
+  ]).optional(),
+  refund_id: z.string().optional(), // ID personalizado del reembolso
+  metadata: z.record(z.any()).optional(),
+  merchant_refund_id: z.string().optional(),
+})
+
+const RefundListRequestSchema = z.object({
+  limit: z.number().int().min(1).max(100).default(20),
+  offset: z.number().int().min(0).default(0),
+  payment_id: z.string().optional(),
+  refund_id: z.string().optional(),
+  profile_id: z.string().optional(),
+  created: z.string().optional(),
+  created_lt: z.string().optional(),
+  created_gt: z.string().optional(),
+  created_lte: z.string().optional(),
+  created_gte: z.string().optional(),
+  status: z.enum([
+    'pending',
+    'succeeded', 
+    'failed',
+    'review',
+    'manual_review'
+  ]).optional(),
+  currency: z.string().length(3).optional(),
+  amount: z.number().int().optional(),
+  connector: z.string().optional(),
+  merchant_refund_id: z.string().optional(),
+  // Ordenamiento
+  sort_by: z.enum(['created_at', 'amount', 'status']).default('created_at'),
+  sort_order: z.enum(['asc', 'desc']).default('desc'),
+}).passthrough()
+
+// ======================================================================
+// TIPOS EXPORTADOS
+// ======================================================================
+
+export type Refund = z.infer<typeof RefundSchema>
+export type RefundListResponse = z.infer<typeof RefundListResponseSchema>
+export type RefundCreateRequest = z.infer<typeof RefundCreateRequestSchema>
+export type RefundListRequest = z.infer<typeof RefundListRequestSchema>
+export type RefundUpdateRequest = Partial<Pick<RefundCreateRequest, 'metadata'>>
+
+// ======================================================================
+// ERROR HANDLING
+// ======================================================================
+
+export class RefundApiError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public statusCode: number = 400,
+    public details?: any
+  ) {
+    super(message)
+    this.name = 'RefundApiError'
+  }
+
+  static fromHyperswitchError(error: any): RefundApiError {
+    return new RefundApiError(
+      error.error?.code || error.error_code || 'UNKNOWN_ERROR',
+      error.error?.message || error.error_message || error.message || 'Error desconocido',
+      error.status || error.statusCode || 400,
+      error
+    )
+  }
+
+  static fromValidationError(error: z.ZodError): RefundApiError {
+    const firstError = error.errors[0]
+    return new RefundApiError(
+      'VALIDATION_ERROR',
+      `Error de validación en ${firstError.path.join('.')}: ${firstError.message}`,
+      400,
+      error.errors
+    )
+  }
 }
 
-interface UseRefundsOptions {
-  merchantId: string
-  filters?: RefundFilters
-  sortOptions?: RefundSortOptions
-  pagination?: PaginationOptions
-  enabled?: boolean
-  refreshInterval?: number
-  autoRefresh?: boolean
-}
-interface UseRefundsState {
-  refunds: RefundData[]
+// ======================================================================
+// HOOK INTERFACE
+// ======================================================================
+
+interface UseRefundsReturn {
+  // State
+  refunds: Refund[]
+  currentRefund: Refund | null
+  isLoading: boolean
+  error: string | null
   totalCount: number
   hasMore: boolean
-  loading: boolean
-  error: MultipagaApiError | null
-  creating: boolean
-  updating: boolean
-  processing: boolean
-  cancelling: boolean
-  retrying: boolean
-  exporting: boolean
-}
-interface UseRefundsActions {
-  createRefund: (params: CreateRefundParams) => Promise<RefundData | null>
-  updateRefund: (params: UpdateRefundParams) => Promise<RefundData | null>
-  processRefund: (refundId: string) => Promise<boolean>
-  cancelRefund: (refundId: string, reason: string) => Promise<boolean>
-  retryRefund: (refundId: string) => Promise<boolean>
-  bulkCancel: (refundIds: string[], reason: string) => Promise<{ success: number; failed: number }>
-  bulkRetry: (refundIds: string[]) => Promise<{ success: number; failed: number }>
-  refresh: () => Promise<void>
-  loadMore: () => Promise<void>
-  setFilters: (filters: RefundFilters) => void
-  setSortOptions: (sortOptions: RefundSortOptions) => void
-  setPagination: (pagination: PaginationOptions) => void
-  exportRefunds: (format: 'csv' | 'excel') => Promise<string | null>
-  searchRefunds: (query: string) => void
-  clearSearch: () => void
+  
+  // Actions
+  createRefund: (data: RefundCreateRequest) => Promise<Refund>
+  getRefund: (refundId: string) => Promise<Refund>
+  updateRefund: (refundId: string, data: RefundUpdateRequest) => Promise<Refund>
+  listRefunds: (params?: Partial<RefundListRequest>) => Promise<void>
+  refreshRefunds: () => Promise<void>
+  clearError: () => void
 }
 
-export function useRefunds(options: UseRefundsOptions): UseRefundsState & UseRefundsActions {
-  const {
-    merchantId,
-    filters: initialFilters = {},
-    sortOptions: initialSortOptions = { sort_by: 'created_at', sort_order: 'desc' },
-    pagination: initialPagination = { limit: 20, offset: 0 },
-    enabled = true,
-    refreshInterval = 0,
-    autoRefresh = false
-  } = options
+// ======================================================================
+// HOOK PRINCIPAL
+// ======================================================================
 
-  const [localFilters, setLocalFilters] = useState<RefundFilters>(initialFilters)
-  const [localSortOptions, setLocalSortOptions] = useState<RefundSortOptions>(initialSortOptions)
-  const [localPagination, setLocalPagination] = useState<PaginationOptions>(initialPagination)
-  const [searchQuery, setSearchQuery] = useState('')
+export function useRefunds(): UseRefundsReturn {
+  const { authState } = useAuth()
+  const [refunds, setRefunds] = useState<Refund[]>([])
+  const [currentRefund, setCurrentRefund] = useState<Refund | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [totalCount, setTotalCount] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [lastListParams, setLastListParams] = useState<RefundListRequest>()
 
-  const [creating, setCreating] = useState(false)
-  const [updating, setUpdating] = useState(false)
-  const [processing, setProcessing] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
-  const [retrying, setRetrying] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  // ======================================================================
+  // API REQUEST HELPER
+  // ======================================================================
 
-  const debouncedSearch = useDebounce(searchQuery, 500)
-  const finalFilters = useMemo(
-    () => ({
-      ...localFilters,
-      ...(debouncedSearch && { search: debouncedSearch })
-    }),
-    [localFilters, debouncedSearch]
-  )
-
-  const swrKey = useMemo(() => {
-    if (!enabled || !merchantId) return null
-    const filtersApi = toApiFilters(finalFilters)
-    return [
-      'refunds',
-      merchantId,
-      JSON.stringify(filtersApi),
-      JSON.stringify(localSortOptions),
-      JSON.stringify(localPagination)
-    ]
-  }, [enabled, merchantId, finalFilters, localSortOptions, localPagination])
-
-  const fetcher = useCallback(async (key: any[]) => {
-    const [, merchantId, filtersStr, sortStr, paginationStr] = key
-    const parsedFilters = JSON.parse(filtersStr)
-    const parsedSort = JSON.parse(sortStr) as RefundSortOptions
-    const parsedPagination = JSON.parse(paginationStr) as PaginationOptions
-
-    const params = new URLSearchParams()
-    Object.entries(parsedFilters).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') {
-        if (Array.isArray(v)) v.forEach(val => params.append(k, String(val)))
-        else params.append(k, String(v))
-      }
-    })
-
-    if (parsedSort.sort_by) params.append('sort_by', parsedSort.sort_by)
-    if (parsedSort.sort_order) params.append('sort_order', parsedSort.sort_order)
-    if (parsedPagination.limit) params.append('limit', String(parsedPagination.limit))
-    if (parsedPagination.offset) params.append('offset', String(parsedPagination.offset))
-
-    const response = await internalApi.get(`/refunds?${params.toString()}`, {
-      headers: { 'X-Merchant-Id': merchantId }
-    })
-    return response.data
-  }, [])
-
-  const { data, error, isLoading, isValidating, mutate } = useSWR(swrKey, fetcher, {
-    refreshInterval: enabled && autoRefresh ? refreshInterval : 0,
-    revalidateOnFocus: false,
-    dedupingInterval: 10000,
-    errorRetryCount: 3,
-    onError: err => {
-      if (err instanceof MultipagaApiError) {
-        toast.error(`Error al cargar reembolsos: ${err.getUserMessage()}`)
-      }
+  const makeApiRequest = useCallback(async <T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> => {
+    // Validar autenticación
+    if (!authState?.isAuthenticated || !authState?.apiKey || !authState?.merchantId || !authState?.profileId) {
+      throw new RefundApiError('AUTH_REQUIRED', 'Autenticación requerida. Por favor inicie sesión.', 401)
     }
-  })
 
-  const refunds: RefundData[] = data?.refunds || []
-  const totalCount = data?.total_count || 0
-  const hasMore = data?.has_more || false
-
-  const createRefund = useCallback(
-    async (params: CreateRefundParams): Promise<RefundData | null> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return null
-      }
-      setCreating(true)
-      try {
-        const response = await internalApi.post('/refunds', params, {
-          headers: { 'X-Merchant-Id': merchantId }
-        })
-        toast.success('Reembolso creado exitosamente')
-        await mutate()
-        return response.data
-      } catch (error) {
-        toast.error(
-          error instanceof MultipagaApiError
-            ? error.getUserMessage()
-            : 'Error al crear reembolso'
-        )
-        return null
-      } finally {
-        setCreating(false)
-      }
-    },
-    [merchantId, mutate]
-  )
-
-  const updateRefund = useCallback(
-    async (params: UpdateRefundParams): Promise<RefundData | null> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return null
-      }
-      setUpdating(true)
-      try {
-        const response = await internalApi.put(`/refunds/${params.refund_id}`, params, {
-          headers: { 'X-Merchant-Id': merchantId }
-        })
-        toast.success('Reembolso actualizado exitosamente')
-        await mutate()
-        return response.data
-      } catch (error) {
-        toast.error(
-          error instanceof MultipagaApiError
-            ? error.getUserMessage()
-            : 'Error al actualizar reembolso'
-        )
-        return null
-      } finally {
-        setUpdating(false)
-      }
-    },
-    [merchantId, mutate]
-  )
-
-  const processRefund = useCallback(
-    async (refundId: string): Promise<boolean> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return false
-      }
-      setProcessing(true)
-      try {
-        await internalApi.post(`/refunds/${refundId}/process`, {}, {
-          headers: { 'X-Merchant-Id': merchantId }
-        })
-        toast.success('Reembolso procesado exitosamente')
-        await mutate()
-        return true
-      } catch (error) {
-        toast.error(
-          error instanceof MultipagaApiError
-            ? error.getUserMessage()
-            : 'Error al procesar reembolso'
-        )
-        return false
-      } finally {
-        setProcessing(false)
-      }
-    },
-    [merchantId, mutate]
-  )
-
-  const cancelRefund = useCallback(
-    async (refundId: string, reason: string): Promise<boolean> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return false
-      }
-      setCancelling(true)
-      try {
-        await internalApi.post(`/refunds/${refundId}/cancel`, { reason }, {
-          headers: { 'X-Merchant-Id': merchantId }
-        })
-        toast.success('Reembolso cancelado')
-        await mutate()
-        return true
-      } catch (error) {
-        toast.error(
-          error instanceof MultipagaApiError
-            ? error.getUserMessage()
-            : 'Error al cancelar reembolso'
-        )
-        return false
-      } finally {
-        setCancelling(false)
-      }
-    },
-    [merchantId, mutate]
-  )
-
-  const retryRefund = useCallback(
-    async (refundId: string): Promise<boolean> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return false
-      }
-      setRetrying(true)
-      try {
-        await internalApi.post(`/refunds/${refundId}/retry`, {}, {
-          headers: { 'X-Merchant-Id': merchantId }
-        })
-        toast.success('Reintento de reembolso iniciado')
-        await mutate()
-        return true
-      } catch (error) {
-        toast.error(
-          error instanceof MultipagaApiError
-            ? error.getUserMessage()
-            : 'Error al reintentar reembolso'
-        )
-        return false
-      } finally {
-        setRetrying(false)
-      }
-    },
-    [merchantId, mutate]
-  )
-
-  const bulkCancel = useCallback(
-    async (refundIds: string[], reason: string): Promise<{ success: number; failed: number }> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return { success: 0, failed: refundIds.length }
-      }
-      try {
-        const response = await internalApi.post(
-          '/refunds/bulk-cancel',
-          { refund_ids: refundIds, reason },
-          { headers: { 'X-Merchant-Id': merchantId } }
-        )
-        const result = response.data
-        if (result.success > 0) toast.success(`${result.success} reembolsos cancelados exitosamente`)
-        if (result.failed > 0) toast.error(`${result.failed} reembolsos no pudieron ser cancelados`)
-        await mutate()
-        return result
-      } catch {
-        toast.error('Error al cancelar reembolsos')
-        return { success: 0, failed: refundIds.length }
-      }
-    },
-    [merchantId, mutate]
-  )
-
-  const bulkRetry = useCallback(
-    async (refundIds: string[]): Promise<{ success: number; failed: number }> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return { success: 0, failed: refundIds.length }
-      }
-      try {
-        const response = await internalApi.post(
-          '/refunds/bulk-retry',
-          { refund_ids: refundIds },
-          { headers: { 'X-Merchant-Id': merchantId } }
-        )
-        const result = response.data
-        if (result.success > 0) toast.success(`${result.success} reembolsos reintentados exitosamente`)
-        if (result.failed > 0) toast.error(`${result.failed} reembolsos no pudieron ser reintentados`)
-        await mutate()
-        return result
-      } catch {
-        toast.error('Error al reintentar reembolsos')
-        return { success: 0, failed: refundIds.length }
-      }
-    },
-    [merchantId, mutate]
-  )
-
-  const exportRefunds = useCallback(
-    async (format: 'csv' | 'excel'): Promise<string | null> => {
-      if (!merchantId) {
-        toast.error('ID de merchant requerido')
-        return null
-      }
-      setExporting(true)
-      try {
-        const filtersApi = toApiFilters(finalFilters)
-        const response = await internalApi.post(
-          '/refunds/export',
-          {
-            format,
-            filters: filtersApi,
-            sort_options: localSortOptions
-          },
-          { headers: { 'X-Merchant-Id': merchantId } }
-        )
-        toast.success('Exportación completada. Descarga disponible.')
-        return response.data.download_url
-      } catch (error) {
-        toast.error(
-          error instanceof MultipagaApiError
-            ? error.getUserMessage()
-            : 'Error al exportar reembolsos'
-        )
-        return null
-      } finally {
-        setExporting(false)
-      }
-    },
-    [merchantId, finalFilters, localSortOptions]
-  )
-
-  const refresh = useCallback(async () => { await mutate() }, [mutate])
-  const loadMore = useCallback(async () => {
-    if (!hasMore) return
-    setLocalPagination({
-      ...localPagination,
-      offset: (localPagination.offset || 0) + (localPagination.limit || 20)
+    // ✅ USAR PROXY: Como /api/refunds no existe, usar el proxy de Hyperswitch
+    const url = `/api/hyperswitch/refunds${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`
+    
+    // Headers de autenticación
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Merchant-Id': authState.merchantId,
+      'X-Profile-Id': authState.profileId,
+      'Authorization': `Bearer ${authState.apiKey}`,
+      ...options.headers,
     })
-  }, [hasMore, localPagination])
-  const setFilters = useCallback((newFilters: RefundFilters) => {
-    setLocalFilters(newFilters)
-    setLocalPagination({ ...localPagination, offset: 0 })
-  }, [localPagination])
-  const setSortOptions = useCallback((newSortOptions: RefundSortOptions) => {
-    setLocalSortOptions(newSortOptions)
-    setLocalPagination({ ...localPagination, offset: 0 })
-  }, [localPagination])
-  const setPagination = useCallback((newPagination: PaginationOptions) => {
-    setLocalPagination(newPagination)
+
+    try {
+      console.log(`🚀 Making Refund API request to: ${url}`, {
+        method: options.method || 'GET',
+        headers: Object.fromEntries(headers.entries()),
+      })
+
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      })
+
+      let responseData: any = {}
+      const contentType = response.headers.get('content-type')
+      
+      try {
+        if (contentType?.includes('application/json')) {
+          responseData = await response.json()
+        } else {
+          const textData = await response.text()
+          if (textData) {
+            responseData = JSON.parse(textData)
+          }
+        }
+      } catch (parseError) {
+        console.warn('Error parsing refund response:', parseError)
+        responseData = { message: `HTTP ${response.status}: ${response.statusText}` }
+      }
+
+      if (!response.ok) {
+        console.error(`❌ Refund API Error ${response.status}:`, responseData)
+        throw RefundApiError.fromHyperswitchError({
+          ...responseData,
+          status: response.status,
+          statusCode: response.status
+        })
+      }
+
+      console.log(`✅ Refund API Success:`, responseData)
+      return responseData
+
+    } catch (error) {
+      if (error instanceof RefundApiError) {
+        throw error
+      }
+
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new RefundApiError(
+          'NETWORK_ERROR',
+          'Error de conexión. Verifique su conexión a internet.',
+          503
+        )
+      }
+
+      throw new RefundApiError(
+        'UNKNOWN_ERROR',
+        error instanceof Error ? error.message : 'Error desconocido',
+        500,
+        error
+      )
+    }
+  }, [authState])
+
+  // ======================================================================
+  // REFUND OPERATIONS
+  // ======================================================================
+
+  const createRefund = useCallback(async (data: RefundCreateRequest): Promise<Refund> => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const validatedData = RefundCreateRequestSchema.parse({
+        ...data,
+        reason: data.reason || 'requested_by_customer',
+      })
+
+      const response = await makeApiRequest<Refund>('', {
+        method: 'POST',
+        body: JSON.stringify(validatedData),
+      })
+
+      const refund = RefundSchema.parse(response)
+      
+      setRefunds(prev => [refund, ...prev])
+      setCurrentRefund(refund)
+      setTotalCount(prev => prev + 1)
+      
+      toast.success('Reembolso creado exitosamente')
+      return refund
+      
+    } catch (error) {
+      let errorMessage = 'Error al crear el reembolso'
+      
+      if (error instanceof z.ZodError) {
+        const validationError = RefundApiError.fromValidationError(error)
+        errorMessage = validationError.message
+      } else if (error instanceof RefundApiError) {
+        errorMessage = error.message
+      }
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [makeApiRequest])
+
+  const getRefund = useCallback(async (refundId: string): Promise<Refund> => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const response = await makeApiRequest<Refund>(`/${refundId}`)
+      const refund = RefundSchema.parse(response)
+      
+      setCurrentRefund(refund)
+      setRefunds(prev => prev.map(r => 
+        r.refund_id === refundId ? refund : r
+      ))
+      
+      return refund
+      
+    } catch (error) {
+      const errorMessage = error instanceof RefundApiError 
+        ? error.message 
+        : 'Error al obtener el reembolso'
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [makeApiRequest])
+
+  const updateRefund = useCallback(async (
+    refundId: string, 
+    data: RefundUpdateRequest
+  ): Promise<Refund> => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const response = await makeApiRequest<Refund>(`/${refundId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      })
+
+      const refund = RefundSchema.parse(response)
+      
+      setCurrentRefund(refund)
+      setRefunds(prev => prev.map(r => 
+        r.refund_id === refundId ? refund : r
+      ))
+      
+      toast.success('Reembolso actualizado exitosamente')
+      return refund
+      
+    } catch (error) {
+      const errorMessage = error instanceof RefundApiError 
+        ? error.message 
+        : 'Error al actualizar el reembolso'
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [makeApiRequest])
+
+  const listRefunds = useCallback(async (params: Partial<RefundListRequest> = {}): Promise<void> => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Aplicar valores por defecto seguros
+      const safeParams = {
+        limit: 20,
+        offset: 0,
+        sort_by: 'created_at' as const,
+        sort_order: 'desc' as const,
+        ...params,
+      }
+
+      // Validar parámetros
+      const validatedParams = RefundListRequestSchema.parse(safeParams)
+      setLastListParams(validatedParams)
+
+      // Construir query string
+      const queryParams = new URLSearchParams()
+      Object.entries(validatedParams).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, String(value))
+        }
+      })
+
+      console.log(`🔍 Fetching refunds with params:`, validatedParams)
+
+      // Usar endpoint de listado según documentación de Hyperswitch
+      const response = await makeApiRequest<any>(`/list?${queryParams.toString()}`, {
+        method: 'GET',
+      })
+
+      // Parsear respuesta de manera flexible
+      let refundList: RefundListResponse
+      try {
+        refundList = RefundListResponseSchema.parse(response)
+      } catch (parseError) {
+        console.warn('Error parsing refund list response:', parseError)
+        // Fallback: intentar extraer datos manualmente
+        const data = response.data || response.refunds || response || []
+        refundList = {
+          data: Array.isArray(data) ? data : [],
+          size: data.length || 0,
+          count: data.length || 0,
+          has_more: false,
+          total_count: data.length || 0,
+        }
+      }
+      
+      setRefunds(refundList.data)
+      setTotalCount(refundList.total_count)
+      setHasMore(refundList.has_more)
+      
+      console.log(`✅ Loaded ${refundList.data.length} refunds`)
+      
+    } catch (error) {
+      let errorMessage = 'Error al cargar los reembolsos'
+      
+      if (error instanceof RefundApiError) {
+        errorMessage = error.message
+      } else if (error instanceof z.ZodError) {
+        const validationError = RefundApiError.fromValidationError(error)
+        errorMessage = validationError.message
+      }
+      
+      setError(errorMessage)
+      console.error('Error listing refunds:', error)
+      
+      // En caso de error, establecer estado vacío
+      setRefunds([])
+      setTotalCount(0)
+      setHasMore(false)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [makeApiRequest])
+
+  const refreshRefunds = useCallback(async (): Promise<void> => {
+    if (lastListParams) {
+      await listRefunds(lastListParams)
+    } else {
+      await listRefunds({ limit: 20 })
+    }
+  }, [listRefunds, lastListParams])
+
+  const clearError = useCallback(() => {
+    setError(null)
   }, [])
-  const searchRefunds = useCallback((query: string) => {
-    setSearchQuery(query)
-    setLocalPagination({ ...localPagination, offset: 0 })
-  }, [localPagination])
-  const clearSearch = useCallback(() => {
-    setSearchQuery('')
-    setLocalPagination({ ...localPagination, offset: 0 })
-  }, [localPagination])
+
+  // ======================================================================
+  // EFFECTS
+  // ======================================================================
+
+  // Auto-load refunds on mount
+  useEffect(() => {
+    if (authState?.isAuthenticated && authState?.merchantId && authState?.profileId) {
+      listRefunds({ limit: 20 })
+    }
+  }, [authState?.isAuthenticated, authState?.merchantId, authState?.profileId, listRefunds])
 
   return {
+    // State
     refunds,
+    currentRefund,
+    isLoading,
+    error,
     totalCount,
     hasMore,
-    loading: isLoading || isValidating,
-    error: error || null,
-    creating,
-    updating,
-    processing,
-    cancelling,
-    retrying,
-    exporting,
+    
+    // Actions
     createRefund,
+    getRefund,
     updateRefund,
-    processRefund,
-    cancelRefund,
-    retryRefund,
-    bulkCancel,
-    bulkRetry,
-    exportRefunds,
-    refresh,
-    loadMore,
-    setFilters,
-    setSortOptions,
-    setPagination,
-    searchRefunds,
-    clearSearch
-  }
-}
-
-/**
- * Hook para reembolsos pendientes
- */
-export function usePendingRefunds(merchantId: string, enabled: boolean = true) {
-  const { data, error, isLoading, mutate } = useSWR(
-    enabled ? ['pending-refunds', merchantId] : null,
-    async () => {
-      const response = await internalApi.get('/refunds/pending', {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-      return response.data
-    },
-    {
-      refreshInterval: 60000, // 1 min
-      dedupingInterval: 30000
-    }
-  )
-  return {
-    pendingRefunds: data?.refunds || [],
-    count: data?.count || 0,
-    loading: isLoading,
-    error,
-    refresh: mutate
-  }
-}
-
-/**
- * Hook para estadísticas de reembolsos
- */
-export function useRefundStatistics(
-  merchantId: string,
-  dateRange?: { start: Date; end: Date },
-  enabled: boolean = true
-) {
-  const swrKey = enabled
-    ? ['refund-statistics', merchantId, dateRange?.start?.toISOString(), dateRange?.end?.toISOString()]
-    : null
-
-  const { data, error, isLoading, mutate } = useSWR(
-    swrKey,
-    async () => {
-      const params = new URLSearchParams()
-      if (dateRange) {
-        params.append('start_date', dateRange.start.toISOString())
-        params.append('end_date', dateRange.end.toISOString())
-      }
-      const response = await internalApi.get(`/refunds/statistics?${params.toString()}`, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-      return response.data
-    },
-    {
-      dedupingInterval: 300000 // 5 minutos
-    }
-  )
-
-  return {
-    statistics: data as RefundStatistics | undefined,
-    loading: isLoading,
-    error,
-    refresh: mutate
-  }
-}
-
-/**
- * Hook para políticas de reembolso
- */
-export function useRefundPolicy(
-  merchantId: string,
-  profileId?: string,
-  enabled: boolean = true
-) {
-  const { data, error, isLoading, mutate } = useSWR(
-    enabled ? ['refund-policy', merchantId, profileId] : null,
-    async () => {
-      const params = new URLSearchParams()
-      if (profileId) params.append('profile_id', profileId)
-      const response = await internalApi.get(`/refunds/policy?${params.toString()}`, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-      return response.data
-    },
-    {
-      dedupingInterval: 3600000 // 1 hora
-    }
-  )
-
-  const updatePolicy = useCallback(async (policy: RefundPolicyConfig): Promise<boolean> => {
-    try {
-      await internalApi.put('/refunds/policy', policy, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-      toast.success('Política de reembolso actualizada')
-      await mutate()
-      return true
-    } catch (error) {
-      toast.error('Error al actualizar política de reembolso')
-      return false
-    }
-  }, [merchantId, mutate])
-
-  return {
-    policy: data as RefundPolicyConfig | undefined,
-    loading: isLoading,
-    error,
-    updatePolicy,
-    refresh: mutate
+    listRefunds,
+    refreshRefunds,
+    clearError,
   }
 }

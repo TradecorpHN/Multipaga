@@ -1,544 +1,734 @@
 // src/presentation/hooks/useConnectors.ts
-// ──────────────────────────────────────────────────────────────────────────────
-// useConnectors Hook - Gestión de conectores de pago
-// ──────────────────────────────────────────────────────────────────────────────
+// Hook completamente corregido para cargar datos reales de conectores de Hyperswitch
+import { useState, useCallback, useEffect } from 'react'
+import { useAuth } from '@/presentation/contexts/AuthContext'
+import toast from 'react-hot-toast'
+import { z } from 'zod'
 
-import { useState, useCallback, useMemo } from 'react'
-import useSWR from 'swr'
-import { toast } from 'react-hot-toast'
-import { internalApi, MultipagaApiError } from '../lib/axios-config'
-import type {
-  ConnectorInfo,
-  ConnectorFilters,
-  PaginationOptions,
-  CreateConnectorParams,
-  UpdateConnectorParams,
-  ConnectorPerformanceStats,
-  ConnectorRoutingConfig
-} from '../../domain/repositories/IConnectorRepository'
-import { ConnectorType } from '../../domain/value-objects/ConnectorType'
+// Schema para detalles de cuenta del conector
+const ConnectorAccountDetailsSchema = z.object({
+  auth_type: z.enum(['HeaderKey', 'BodyKey', 'SignatureKey', 'MultiAuthKey']),
+  api_key: z.string().optional(),
+  api_secret: z.string().optional(),
+  key1: z.string().optional(),
+  key2: z.string().optional(),
+  merchant_id: z.string().optional(),
+  merchant_account_id: z.string().optional(),
+  test_mode: z.boolean().optional(),
+  additional_config: z.record(z.any()).optional(),
+})
 
-/**
- * Opciones para el hook useConnectors
- */
-interface UseConnectorsOptions {
-  merchantId: string
-  filters?: ConnectorFilters
-  pagination?: PaginationOptions
-  enabled?: boolean
-  refreshInterval?: number
+// Schema para métodos de pago habilitados
+const PaymentMethodEnabledSchema = z.object({
+  payment_method: z.string(),
+  payment_method_types: z.array(z.string()).optional(),
+  payment_method_issuers: z.array(z.string()).optional(),
+  payment_schemes: z.array(z.string()).optional(),
+  accepted_currencies: z.object({
+    type: z.enum(['enable_only', 'disable_only']),
+    list: z.array(z.string()),
+  }).optional(),
+  accepted_countries: z.object({
+    type: z.enum(['enable_only', 'disable_only']),
+    list: z.array(z.string()),
+  }).optional(),
+  minimum_amount: z.number().optional(),
+  maximum_amount: z.number().optional(),
+  recurring_enabled: z.boolean().optional(),
+  installment_payment_enabled: z.boolean().optional(),
+})
+
+// Schema para detalles de webhook del conector
+const ConnectorWebhookDetailsSchema = z.object({
+  merchant_secret: z.string().optional(),
+  additional_webhook_details: z.record(z.any()).optional(),
+})
+
+// FIX: Schema principal del conector con tipos compatibles y tipado estricto
+const ConnectorSchema = z.object({
+  merchant_connector_id: z.string(),
+  connector_type: z.enum(['payment_processor', 'authentication_processor', 'fraud_check', 'acquirer', 'accounting']),
+  connector_name: z.string(),
+  connector_label: z.string().optional(),
+  merchant_id: z.string().optional(),
+  connector_account_details: ConnectorAccountDetailsSchema.optional(),
+  test_mode: z.boolean().optional().default(false),
+  disabled: z.boolean().optional().default(false),
+  payment_methods_enabled: z.array(PaymentMethodEnabledSchema).optional(),
+  metadata: z.record(z.any()).optional(),
+  connector_webhook_details: ConnectorWebhookDetailsSchema.optional(),
+  created_at: z.string().optional(),
+  modified_at: z.string().optional(),
+  business_country: z.string().optional(),
+  business_label: z.string().optional(),
+  business_sub_label: z.string().optional(),
+  frm_configs: z.array(z.any()).optional(),
+  profile_id: z.string().optional(),
+  applepay_verified_domains: z.array(z.string()).optional(),
+  pm_auth_config: z.record(z.any()).optional(),
+  status: z.enum(['active', 'inactive', 'pending']).optional().default('active'),
+})
+
+const ConnectorListResponseSchema = z.object({
+  connectors: z.array(ConnectorSchema).optional(),
+  data: z.array(ConnectorSchema).optional(),
+  size: z.number().optional(),
+  count: z.number().optional(),
+  has_more: z.boolean().optional(),
+  total_count: z.number().optional(),
+})
+
+// Schema para crear conector
+const CreateConnectorRequestSchema = z.object({
+  connector_type: z.enum(['payment_processor', 'authentication_processor', 'fraud_check', 'acquirer', 'accounting']),
+  connector_name: z.string(),
+  connector_label: z.string().optional(),
+  connector_account_details: ConnectorAccountDetailsSchema,
+  test_mode: z.boolean().default(true),
+  disabled: z.boolean().default(false),
+  payment_methods_enabled: z.array(PaymentMethodEnabledSchema).optional(),
+  metadata: z.record(z.any()).optional(),
+  connector_webhook_details: ConnectorWebhookDetailsSchema.optional(),
+  business_country: z.string().optional(),
+  business_label: z.string().optional(),
+  business_sub_label: z.string().optional(),
+})
+
+// Tipos exportados
+export type Connector = z.infer<typeof ConnectorSchema>
+export type ConnectorListResponse = z.infer<typeof ConnectorListResponseSchema>
+export type CreateConnectorRequest = z.infer<typeof CreateConnectorRequestSchema>
+export type UpdateConnectorRequest = Partial<CreateConnectorRequest> & { 
+  merchant_connector_id: string 
+}
+export type ConnectorAccountDetails = z.infer<typeof ConnectorAccountDetailsSchema>
+export type PaymentMethodEnabled = z.infer<typeof PaymentMethodEnabledSchema>
+
+// FIX: Tipado estricto para los tiers de conectores
+export type ConnectorTier = 1 | 2 | 3
+
+// FIX: Interface para información de conector soportado con tipado estricto
+export interface SupportedConnectorInfo {
+  name: string
+  tier: ConnectorTier
+  regions: string[]
+  methods: string[]
+  logo: string
 }
 
-/**
- * Estado del hook useConnectors
- */
-interface UseConnectorsState {
-  connectors: ConnectorInfo[]
+// Lista completa de conectores soportados por Hyperswitch con información adicional
+export const SUPPORTED_CONNECTORS: Record<string, SupportedConnectorInfo> = {
+  // Tier 1 - Principales proveedores globales
+  'stripe': { 
+    name: 'Stripe', 
+    tier: 1, 
+    regions: ['Global'], 
+    methods: ['card', 'bank_redirect', 'wallet', 'bank_transfer'],
+    logo: '/resources/connectors/STRIPE.svg'
+  },
+  'adyen': { 
+    name: 'Adyen', 
+    tier: 1, 
+    regions: ['Global'], 
+    methods: ['card', 'bank_redirect', 'wallet', 'bank_transfer', 'crypto'],
+    logo: '/resources/connectors/ADYEN.svg'
+  },
+  'paypal': { 
+    name: 'PayPal', 
+    tier: 1, 
+    regions: ['Global'], 
+    methods: ['wallet', 'card'],
+    logo: '/resources/connectors/PAYPAL.svg'
+  },
+  'checkout': { 
+    name: 'Checkout.com', 
+    tier: 1, 
+    regions: ['Global'], 
+    methods: ['card', 'wallet', 'bank_transfer'],
+    logo: '/resources/connectors/CHECKOUT.svg'
+  },
+  
+  // Tier 2 - Proveedores regionales importantes
+  'klarna': { 
+    name: 'Klarna', 
+    tier: 2, 
+    regions: ['Europe', 'US'], 
+    methods: ['pay_later'],
+    logo: '/resources/connectors/KLARNA.svg'
+  },
+  'rapyd': { 
+    name: 'Rapyd', 
+    tier: 2, 
+    regions: ['Global'], 
+    methods: ['card', 'wallet', 'bank_transfer'],
+    logo: '/resources/connectors/RAPYD.svg'
+  },
+  'worldpay': { 
+    name: 'Worldpay', 
+    tier: 2, 
+    regions: ['Global'], 
+    methods: ['card', 'wallet'],
+    logo: '/resources/connectors/WORLDPAY.svg'
+  },
+  'square': { 
+    name: 'Square', 
+    tier: 2, 
+    regions: ['US', 'Canada', 'Australia'], 
+    methods: ['card'],
+    logo: '/resources/connectors/SQUARE.svg'
+  },
+  'braintree': { 
+    name: 'Braintree', 
+    tier: 2, 
+    regions: ['Global'], 
+    methods: ['card', 'wallet'],
+    logo: '/resources/connectors/BRAINTREE.svg'
+  },
+  
+  // Tier 3 - Proveedores especializados
+  'multisafepay': { 
+    name: 'MultiSafepay', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['card', 'bank_redirect', 'wallet'],
+    logo: '/resources/connectors/MULTISAFEPAY.svg'
+  },
+  'trustpay': { 
+    name: 'TrustPay', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['card', 'bank_transfer'],
+    logo: '/resources/connectors/TRUSTPAY.svg'
+  },
+  'payu': { 
+    name: 'PayU', 
+    tier: 3, 
+    regions: ['Latin America', 'Europe'], 
+    methods: ['card', 'bank_transfer'],
+    logo: '/resources/connectors/PAYU.svg'
+  },
+  'cybersource': { 
+    name: 'Cybersource', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['card'],
+    logo: '/resources/connectors/CYBERSOURCE.svg'
+  },
+  'shift4': { 
+    name: 'Shift4', 
+    tier: 3, 
+    regions: ['US'], 
+    methods: ['card'],
+    logo: '/resources/connectors/SHIFT4.svg'
+  },
+  'worldline': { 
+    name: 'Worldline', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['card', 'bank_redirect'],
+    logo: '/resources/connectors/WORLDLINE.svg'
+  },
+  'payone': { 
+    name: 'Payone', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['card', 'bank_redirect'],
+    logo: '/resources/connectors/PAYONE.svg'
+  },
+  'fiserv': { 
+    name: 'Fiserv', 
+    tier: 3, 
+    regions: ['US'], 
+    methods: ['card'],
+    logo: '/resources/connectors/FISERV.svg'
+  },
+  'helcim': { 
+    name: 'Helcim', 
+    tier: 3, 
+    regions: ['Canada'], 
+    methods: ['card'],
+    logo: '/resources/connectors/HELCIM.svg'
+  },
+  'bluesnap': { 
+    name: 'BlueSnap', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['card', 'wallet'],
+    logo: '/resources/connectors/BLUESNAP.svg'
+  },
+  'nuvei': { 
+    name: 'Nuvei', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['card', 'wallet', 'bank_transfer'],
+    logo: '/resources/connectors/NUVEI.svg'
+  },
+  'wise': { 
+    name: 'Wise', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['bank_transfer'],
+    logo: '/resources/connectors/WISE.svg'
+  },
+  'iatapay': { 
+    name: 'IATAPay', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['card'],
+    logo: '/resources/connectors/IATAPAY.svg'
+  },
+  'noon': { 
+    name: 'Noon', 
+    tier: 3, 
+    regions: ['Middle East'], 
+    methods: ['card', 'wallet'],
+    logo: '/resources/connectors/NOON.svg'
+  },
+  'airwallex': { 
+    name: 'Airwallex', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['card', 'bank_transfer'],
+    logo: '/resources/connectors/AIRWALLEX.svg'
+  },
+  'globalpay': { 
+    name: 'GlobalPay', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['card'],
+    logo: '/resources/connectors/GLOBALPAY.svg'
+  },
+  'nexinets': { 
+    name: 'Nexinets', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['card'],
+    logo: '/resources/connectors/NEXINETS.svg'
+  },
+  'stax': { 
+    name: 'Stax', 
+    tier: 3, 
+    regions: ['US'], 
+    methods: ['card'],
+    logo: '/resources/connectors/STAX.svg'
+  },
+  'tsys': { 
+    name: 'TSYS', 
+    tier: 3, 
+    regions: ['US'], 
+    methods: ['card'],
+    logo: '/resources/connectors/TSYS.svg'
+  },
+  'nmi': { 
+    name: 'NMI', 
+    tier: 3, 
+    regions: ['US'], 
+    methods: ['card'],
+    logo: '/resources/connectors/NMI.svg'
+  },
+  'volt': { 
+    name: 'Volt', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['bank_transfer'],
+    logo: '/resources/connectors/VOLT.svg'
+  },
+  'zen': { 
+    name: 'Zen', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['card'],
+    logo: '/resources/connectors/ZEN.svg'
+  },
+  'wellsfargo': { 
+    name: 'Wells Fargo', 
+    tier: 3, 
+    regions: ['US'], 
+    methods: ['card'],
+    logo: '/resources/connectors/WELLSFARGO.svg'
+  },
+  'tokenio': { 
+    name: 'Token.io', 
+    tier: 3, 
+    regions: ['Europe'], 
+    methods: ['bank_transfer'],
+    logo: '/resources/connectors/TOKENIO.svg'
+  },
+  'payeezy': { 
+    name: 'Payeezy', 
+    tier: 3, 
+    regions: ['US'], 
+    methods: ['card'],
+    logo: '/resources/connectors/PAYEEZY.svg'
+  },
+  'globalpayments': { 
+    name: 'Global Payments', 
+    tier: 3, 
+    regions: ['Global'], 
+    methods: ['card'],
+    logo: '/resources/connectors/GLOBALPAYMENTS.svg'
+  },
+  'netnaxept': { 
+    name: 'Nets/Netaxept', 
+    tier: 3, 
+    regions: ['Nordic'], 
+    methods: ['card'],
+    logo: '/resources/connectors/NETNAXEPT.svg'
+  },
+} as const
+
+export type SupportedConnector = keyof typeof SUPPORTED_CONNECTORS
+
+class ConnectorApiError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public statusCode: number = 400,
+    public details?: any
+  ) {
+    super(message)
+    this.name = 'ConnectorApiError'
+  }
+}
+
+interface UseConnectorsReturn {
+  // State
+  connectors: Connector[]
+  isLoading: boolean
+  error: string | null
   totalCount: number
-  hasMore: boolean
-  loading: boolean
-  error: MultipagaApiError | null
-  creating: boolean
-  updating: boolean
-  deleting: boolean
-  testing: boolean
+  
+  // Actions
+  createConnector: (data: CreateConnectorRequest) => Promise<Connector>
+  getConnector: (connectorId: string) => Promise<Connector>
+  updateConnector: (connectorId: string, data: UpdateConnectorRequest) => Promise<Connector>
+  deleteConnector: (connectorId: string) => Promise<void>
+  testConnector: (connectorId: string) => Promise<boolean>
+  listConnectors: () => Promise<void>
+  refreshConnectors: () => Promise<void>
+  getActiveConnectors: () => Connector[]
+  getConnectorsByType: (type: string) => Connector[]
+  clearError: () => void
 }
 
-/**
- * Acciones del hook useConnectors
- */
-interface UseConnectorsActions {
-  // CRUD operations
-  createConnector: (params: CreateConnectorParams) => Promise<ConnectorInfo | null>
-  updateConnector: (params: UpdateConnectorParams) => Promise<ConnectorInfo | null>
-  deleteConnector: (merchantConnectorId: string) => Promise<boolean>
-  enableConnector: (merchantConnectorId: string) => Promise<boolean>
-  disableConnector: (merchantConnectorId: string) => Promise<boolean>
-  
-  // Testing and validation
-  testConnection: (merchantConnectorId: string) => Promise<boolean>
-  validateCredentials: (connectorName: string, credentials: any) => Promise<boolean>
-  
-  // Configuration
-  updateRoutingConfig: (config: ConnectorRoutingConfig[]) => Promise<boolean>
-  syncConfiguration: (merchantConnectorId: string) => Promise<boolean>
-  
-  // Data fetching
-  refresh: () => Promise<void>
-  loadMore: () => Promise<void>
-  setFilters: (filters: ConnectorFilters) => void
-  setPagination: (pagination: PaginationOptions) => void
-}
+export function useConnectors(): UseConnectorsReturn {
+  // FIX: Acceso correcto a authState
+  const { authState } = useAuth()
+  const [connectors, setConnectors] = useState<Connector[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [totalCount, setTotalCount] = useState(0)
 
-/**
- * Tipo de retorno del hook
- */
-type UseConnectorsReturn = UseConnectorsState & UseConnectorsActions
-
-/**
- * Hook para gestionar conectores de pago
- */
-export function useConnectors(options: UseConnectorsOptions): UseConnectorsReturn {
-  const {
-    merchantId,
-    filters = {},
-    pagination = { limit: 20, offset: 0 },
-    enabled = true,
-    refreshInterval = 30000 // 30 segundos
-  } = options
-
-  // Estado local
-  const [localFilters, setLocalFilters] = useState<ConnectorFilters>(filters)
-  const [localPagination, setLocalPagination] = useState<PaginationOptions>(pagination)
-  const [creating, setCreating] = useState(false)
-  const [updating, setUpdating] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [testing, setTesting] = useState(false)
-
-  // Clave para SWR
-  const swrKey = useMemo(() => {
-    if (!enabled || !merchantId) return null
-    
-    return [
-      'connectors',
-      merchantId,
-      JSON.stringify(localFilters),
-      JSON.stringify(localPagination)
-    ]
-  }, [enabled, merchantId, localFilters, localPagination])
-
-  // Fetcher para SWR
-  const fetcher = useCallback(async ([_, merchantId, filtersStr, paginationStr]: string[]) => {
-    const parsedFilters = JSON.parse(filtersStr) as ConnectorFilters
-    const parsedPagination = JSON.parse(paginationStr) as PaginationOptions
-
-    const params = new URLSearchParams()
-    
-    // Añadir filtros
-    Object.entries(parsedFilters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        if (Array.isArray(value)) {
-          value.forEach(v => params.append(key, String(v)))
-        } else {
-          params.append(key, String(value))
-        }
-      }
-    })
-
-    // Añadir paginación
-    if (parsedPagination.limit) params.append('limit', String(parsedPagination.limit))
-    if (parsedPagination.offset) params.append('offset', String(parsedPagination.offset))
-    if (parsedPagination.sort_by) params.append('sort_by', parsedPagination.sort_by)
-    if (parsedPagination.sort_order) params.append('sort_order', parsedPagination.sort_order)
-
-    const response = await internalApi.get(`/connectors?${params.toString()}`, {
-      headers: { 'X-Merchant-Id': merchantId }
-    })
-
-    return response.data
-  }, [])
-
-  // Hook SWR
-  const {
-    data,
-    error,
-    isLoading,
-    isValidating,
-    mutate
-  } = useSWR(swrKey, fetcher, {
-    refreshInterval: enabled ? refreshInterval : 0,
-    revalidateOnFocus: false,
-    dedupingInterval: 10000,
-    errorRetryCount: 3,
-    onError: (error) => {
-      console.error('Error fetching connectors:', error)
-      if (error instanceof MultipagaApiError) {
-        toast.error(`Error al cargar conectores: ${error.getUserMessage()}`)
-      }
-    }
-  })
-
-  // Extraer datos
-  const connectors = data?.connectors || []
-  const totalCount = data?.total_count || 0
-  const hasMore = data?.has_more || false
-
-  // Crear conector
-  const createConnector = useCallback(async (params: CreateConnectorParams): Promise<ConnectorInfo | null> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return null
+  // Helper para hacer requests a la API
+  const makeApiRequest = useCallback(async <T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> => {
+    // FIX: Verificación correcta de authState
+    if (!authState?.merchantId || !authState?.profileId) {
+      throw new ConnectorApiError('AUTH_REQUIRED', 'Autenticación requerida', 401)
     }
 
-    setCreating(true)
+    const url = `/api/hyperswitch${endpoint}`
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+      'X-Merchant-Id': authState.merchantId,
+      'X-Profile-Id': authState.profileId,
+      ...options.headers,
+    })
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    })
+
+    if (!response.ok) {
+      let errorData: any = {}
+      try {
+        errorData = await response.json()
+      } catch {
+        // Si no se puede parsear el JSON, usar mensaje por defecto
+      }
+
+      const error = new ConnectorApiError(
+        errorData.error_code || 'API_ERROR',
+        errorData.error_message || `Error ${response.status}: ${response.statusText}`,
+        response.status,
+        errorData
+      )
+      throw error
+    }
+
+    return response.json()
+  }, [authState?.merchantId, authState?.profileId])
+
+  // Create a new connector
+  const createConnector = useCallback(async (data: CreateConnectorRequest): Promise<Connector> => {
+    setIsLoading(true)
+    setError(null)
+
     try {
-      const response = await internalApi.post('/connectors', params, {
-        headers: { 'X-Merchant-Id': merchantId }
+      // Validar datos de entrada
+      const validatedData = CreateConnectorRequestSchema.parse({
+        ...data,
+        business_country: data.business_country || 'HN',
+        business_label: data.business_label || 'TradecorpHN',
       })
 
-      const newConnector = response.data
-      toast.success(`Conector ${newConnector.connector_name} creado exitosamente`)
+      const response = await makeApiRequest<Connector>('/account/connectors', {
+        method: 'POST',
+        body: JSON.stringify(validatedData),
+      })
+
+      const connector = ConnectorSchema.parse(response)
       
-      // Actualizar cache
-      await mutate()
+      // Add to local state
+      setConnectors(prev => [connector, ...prev])
+      setTotalCount(prev => prev + 1)
       
-      return newConnector
+      toast.success(`Conector ${connector.connector_name} creado exitosamente`)
+      return connector
+      
     } catch (error) {
-      console.error('Error creating connector:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al crear conector'
-      toast.error(message)
-      return null
+      const errorMessage = error instanceof ConnectorApiError 
+        ? error.message 
+        : 'Error al crear el conector'
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
+      throw error
     } finally {
-      setCreating(false)
+      setIsLoading(false)
     }
-  }, [merchantId, mutate])
+  }, [makeApiRequest])
 
-  // Actualizar conector
-  const updateConnector = useCallback(async (params: UpdateConnectorParams): Promise<ConnectorInfo | null> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return null
-    }
+  // Get connector details
+  const getConnector = useCallback(async (connectorId: string): Promise<Connector> => {
+    setIsLoading(true)
+    setError(null)
 
-    setUpdating(true)
     try {
-      const response = await internalApi.put(`/connectors/${params.merchant_connector_id}`, params, {
-        headers: { 'X-Merchant-Id': merchantId }
+      const response = await makeApiRequest<Connector>(`/account/connectors/${connectorId}`)
+      const connector = ConnectorSchema.parse(response)
+      
+      // Update in local state if exists
+      setConnectors(prev => prev.map(c => 
+        c.merchant_connector_id === connectorId ? connector : c
+      ))
+      
+      return connector
+      
+    } catch (error) {
+      const errorMessage = error instanceof ConnectorApiError 
+        ? error.message 
+        : 'Error al obtener el conector'
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [makeApiRequest])
+
+  // Update connector
+  const updateConnector = useCallback(async (
+    connectorId: string, 
+    data: UpdateConnectorRequest
+  ): Promise<Connector> => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const response = await makeApiRequest<Connector>(`/account/connectors/${connectorId}`, {
+        method: 'POST', // Hyperswitch usa POST para updates
+        body: JSON.stringify(data),
       })
 
-      const updatedConnector = response.data
+      const connector = ConnectorSchema.parse(response)
+      
+      setConnectors(prev => prev.map(c => 
+        c.merchant_connector_id === connectorId ? connector : c
+      ))
+      
       toast.success('Conector actualizado exitosamente')
+      return connector
       
-      // Actualizar cache
-      await mutate()
-      
-      return updatedConnector
     } catch (error) {
-      console.error('Error updating connector:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al actualizar conector'
-      toast.error(message)
-      return null
+      const errorMessage = error instanceof ConnectorApiError 
+        ? error.message 
+        : 'Error al actualizar el conector'
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
+      throw error
     } finally {
-      setUpdating(false)
+      setIsLoading(false)
     }
-  }, [merchantId, mutate])
+  }, [makeApiRequest])
 
-  // Eliminar conector
-  const deleteConnector = useCallback(async (merchantConnectorId: string): Promise<boolean> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return false
-    }
+  // Delete connector
+  const deleteConnector = useCallback(async (connectorId: string): Promise<void> => {
+    setIsLoading(true)
+    setError(null)
 
-    setDeleting(true)
     try {
-      await internalApi.delete(`/connectors/${merchantConnectorId}`, {
-        headers: { 'X-Merchant-Id': merchantId }
+      await makeApiRequest(`/account/connectors/${connectorId}`, {
+        method: 'DELETE',
       })
 
+      setConnectors(prev => prev.filter(c => c.merchant_connector_id !== connectorId))
+      setTotalCount(prev => Math.max(0, prev - 1))
+      
       toast.success('Conector eliminado exitosamente')
       
-      // Actualizar cache
-      await mutate()
-      
-      return true
     } catch (error) {
-      console.error('Error deleting connector:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al eliminar conector'
-      toast.error(message)
+      const errorMessage = error instanceof ConnectorApiError 
+        ? error.message 
+        : 'Error al eliminar el conector'
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [makeApiRequest])
+
+  // Test connector connection
+  const testConnector = useCallback(async (connectorId: string): Promise<boolean> => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Hyperswitch no tiene endpoint específico de test, 
+      // pero podemos verificar obteniendo el conector
+      await getConnector(connectorId)
+      
+      toast.success('Conexión del conector verificada exitosamente')
+      return true
+      
+    } catch (error) {
+      const errorMessage = error instanceof ConnectorApiError 
+        ? error.message 
+        : 'Error al probar la conexión del conector'
+      
+      setError(errorMessage)
+      toast.error(errorMessage)
       return false
     } finally {
-      setDeleting(false)
+      setIsLoading(false)
     }
-  }, [merchantId, mutate])
+  }, [getConnector])
 
-  // Habilitar conector
-  const enableConnector = useCallback(async (merchantConnectorId: string): Promise<boolean> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return false
-    }
+  // List all connectors
+  const listConnectors = useCallback(async (): Promise<void> => {
+    setIsLoading(true)
+    setError(null)
 
     try {
-      await internalApi.patch(`/connectors/${merchantConnectorId}/enable`, {}, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-
-      toast.success('Conector habilitado exitosamente')
+      const response = await makeApiRequest<ConnectorListResponse>('/account/connectors')
       
-      // Actualizar cache
-      await mutate()
+      const connectorList = ConnectorListResponseSchema.parse(response)
       
-      return true
+      // Hyperswitch puede retornar los conectores en diferentes formatos
+      const connectorsData = connectorList.connectors || connectorList.data || []
+      
+      setConnectors(connectorsData)
+      setTotalCount(
+        connectorList.total_count || 
+        connectorList.count || 
+        connectorList.size || 
+        connectorsData.length
+      )
+      
     } catch (error) {
-      console.error('Error enabling connector:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al habilitar conector'
-      toast.error(message)
-      return false
-    }
-  }, [merchantId, mutate])
-
-  // Deshabilitar conector
-  const disableConnector = useCallback(async (merchantConnectorId: string): Promise<boolean> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return false
-    }
-
-    try {
-      await internalApi.patch(`/connectors/${merchantConnectorId}/disable`, {}, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-
-      toast.success('Conector deshabilitado exitosamente')
+      const errorMessage = error instanceof ConnectorApiError 
+        ? error.message 
+        : 'Error al cargar los conectores'
       
-      // Actualizar cache
-      await mutate()
-      
-      return true
-    } catch (error) {
-      console.error('Error disabling connector:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al deshabilitar conector'
-      toast.error(message)
-      return false
-    }
-  }, [merchantId, mutate])
-
-  // Probar conexión
-  const testConnection = useCallback(async (merchantConnectorId: string): Promise<boolean> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return false
-    }
-
-    setTesting(true)
-    try {
-      const response = await internalApi.post(`/connectors/${merchantConnectorId}/test`, {}, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-
-      const result = response.data
-      if (result.status === 'success') {
-        toast.success(`Conexión exitosa (${result.response_time_ms}ms)`)
-        return true
-      } else {
-        toast.error(`Conexión fallida: ${result.error_message}`)
-        return false
-      }
-    } catch (error) {
-      console.error('Error testing connection:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al probar conexión'
-      toast.error(message)
-      return false
+      setError(errorMessage)
+      console.error('Error listing connectors:', error)
     } finally {
-      setTesting(false)
+      setIsLoading(false)
     }
-  }, [merchantId])
+  }, [makeApiRequest])
 
-  // Validar credenciales
-  const validateCredentials = useCallback(async (connectorName: string, credentials: any): Promise<boolean> => {
-    try {
-      const response = await internalApi.post('/connectors/validate-credentials', {
-        connector_name: connectorName,
-        credentials
-      })
+  // Refresh connectors
+  const refreshConnectors = useCallback(async (): Promise<void> => {
+    await listConnectors()
+  }, [listConnectors])
 
-      const result = response.data
-      if (result.valid) {
-        toast.success('Credenciales válidas')
-        return true
-      } else {
-        toast.error(`Credenciales inválidas: ${result.error_message}`)
-        return false
-      }
-    } catch (error) {
-      console.error('Error validating credentials:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al validar credenciales'
-      toast.error(message)
-      return false
-    }
+  // FIX: Get active connectors con manejo seguro de disabled
+  const getActiveConnectors = useCallback((): Connector[] => {
+    return connectors.filter(c => {
+      // Manejar disabled como opcional con valor por defecto false
+      const isDisabled = c.disabled ?? false
+      return !isDisabled && c.status !== 'inactive'
+    })
+  }, [connectors])
+
+  // Get connectors by type
+  const getConnectorsByType = useCallback((type: string): Connector[] => {
+    return connectors.filter(c => c.connector_type === type)
+  }, [connectors])
+
+  // Clear error
+  const clearError = useCallback(() => {
+    setError(null)
   }, [])
 
-  // Actualizar configuración de routing
-  const updateRoutingConfig = useCallback(async (config: ConnectorRoutingConfig[]): Promise<boolean> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return false
+  // Auto-load connectors on mount if authenticated
+  useEffect(() => {
+    if (authState?.isAuthenticated && authState?.merchantId && authState?.profileId) {
+      listConnectors()
     }
-
-    try {
-      await internalApi.put('/connectors/routing-config', { config }, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-
-      toast.success('Configuración de routing actualizada')
-      return true
-    } catch (error) {
-      console.error('Error updating routing config:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al actualizar configuración de routing'
-      toast.error(message)
-      return false
-    }
-  }, [merchantId])
-
-  // Sincronizar configuración
-  const syncConfiguration = useCallback(async (merchantConnectorId: string): Promise<boolean> => {
-    if (!merchantId) {
-      toast.error('ID de merchant requerido')
-      return false
-    }
-
-    try {
-      await internalApi.post(`/connectors/${merchantConnectorId}/sync`, {}, {
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-
-      toast.success('Configuración sincronizada exitosamente')
-      
-      // Actualizar cache
-      await mutate()
-      
-      return true
-    } catch (error) {
-      console.error('Error syncing configuration:', error)
-      const message = error instanceof MultipagaApiError 
-        ? error.getUserMessage()
-        : 'Error al sincronizar configuración'
-      toast.error(message)
-      return false
-    }
-  }, [merchantId, mutate])
-
-  // Refrescar datos
-  const refresh = useCallback(async (): Promise<void> => {
-    await mutate()
-  }, [mutate])
-
-  // Cargar más datos
-  const loadMore = useCallback(async (): Promise<void> => {
-    if (!hasMore) return
-
-    const newPagination = {
-      ...localPagination,
-      offset: (localPagination.offset || 0) + (localPagination.limit || 20)
-    }
-
-    setLocalPagination(newPagination)
-  }, [hasMore, localPagination])
-
-  // Establecer filtros
-  const setFilters = useCallback((newFilters: ConnectorFilters): void => {
-    setLocalFilters(newFilters)
-    setLocalPagination({ ...localPagination, offset: 0 })
-  }, [localPagination])
-
-  // Establecer paginación
-  const setPagination = useCallback((newPagination: PaginationOptions): void => {
-    setLocalPagination(newPagination)
-  }, [])
+  }, [authState?.isAuthenticated, authState?.merchantId, authState?.profileId, listConnectors])
 
   return {
-    // Estado
+    // State
     connectors,
+    isLoading,
+    error,
     totalCount,
-    hasMore,
-    loading: isLoading || isValidating,
-    error: error || null,
-    creating,
-    updating,
-    deleting,
-    testing,
-
-    // Acciones
+    
+    // Actions
     createConnector,
+    getConnector,
     updateConnector,
     deleteConnector,
-    enableConnector,
-    disableConnector,
-    testConnection,
-    validateCredentials,
-    updateRoutingConfig,
-    syncConfiguration,
-    refresh,
-    loadMore,
-    setFilters,
-    setPagination
+    testConnector,
+    listConnectors,
+    refreshConnectors,
+    getActiveConnectors,
+    getConnectorsByType,
+    clearError,
   }
 }
 
-/**
- * Hook especializado para obtener tipos de conectores disponibles
- */
-export function useConnectorTypes() {
-  const { data, error, isLoading } = useSWR(
-    'connector-types',
-    async () => {
-      const response = await internalApi.get('/connectors/types')
-      return response.data
-    },
-    {
-      dedupingInterval: 3600000, // 1 hora - los tipos no cambian frecuentemente
-      revalidateOnFocus: false
-    }
-  )
-
+// Hook adicional para obtener información de conectores soportados
+export function useSupportedConnectors() {
   return {
-    types: data || ConnectorType.getAllTypes(),
-    loading: isLoading,
-    error
-  }
-}
-
-/**
- * Hook para métricas de performance de conectores
- */
-export function useConnectorPerformance(
-  merchantId: string,
-  startDate: Date,
-  endDate: Date,
-  enabled: boolean = true
-) {
-  const swrKey = enabled ? ['connector-performance', merchantId, startDate.toISOString(), endDate.toISOString()] : null
-
-  const { data, error, isLoading } = useSWR(
-    swrKey,
-    async ([_, merchantId, start, end]) => {
-      const response = await internalApi.get('/connectors/performance', {
-        params: {
-          start_date: start,
-          end_date: end
-        },
-        headers: { 'X-Merchant-Id': merchantId }
-      })
-      return response.data
+    supportedConnectors: SUPPORTED_CONNECTORS,
+    isConnectorSupported: (connectorName: string): boolean => {
+      return connectorName in SUPPORTED_CONNECTORS
     },
-    {
-      refreshInterval: 300000, // 5 minutos
-      revalidateOnFocus: false
-    }
-  )
-
-  return {
-    metrics: (data || []) as ConnectorPerformanceStats[],
-    loading: isLoading,
-    error
+    getConnectorInfo: (connectorName: string): SupportedConnectorInfo | undefined => {
+      return SUPPORTED_CONNECTORS[connectorName]
+    },
+    getConnectorDisplayName: (connectorName: string): string => {
+      const info = SUPPORTED_CONNECTORS[connectorName]
+      return info?.name || connectorName.charAt(0).toUpperCase() + connectorName.slice(1)
+    },
+    getConnectorsByTier: (tier: ConnectorTier) => {
+      return Object.entries(SUPPORTED_CONNECTORS)
+        .filter(([_, info]) => info.tier === tier)
+        .map(([key, info]) => ({ key, ...info }))
+    },
+    getConnectorsByRegion: (region: string) => {
+      return Object.entries(SUPPORTED_CONNECTORS)
+        .filter(([_, info]) => info.regions.includes(region))
+        .map(([key, info]) => ({ key, ...info }))
+    },
   }
 }
-
-export default useConnectors

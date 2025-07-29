@@ -1,51 +1,118 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { hyperswitchClient } from '/home/kali/multipaga/src/infrastructure/api/clients/HyperswitchClient'
-import type { 
-  PaymentRequest, 
-  PaymentResponse, 
-  Connector
-} from '@/types/hyperswitch'
 
-// Lista de conectores válidos para validación
-const validConnectors = [
-  'adyen', 'stripe', 'checkout', 'square', 'braintree', 'worldpay',
-  'paypal', 'razorpay', 'nuvei', 'shift4', 'cybersource', 'rapyd',
-  'fiserv', 'globalpay', 'worldline', 'payu', 'klarna', 'mollie'
-] as const
+// ======================================================================
+// CONFIGURACIÓN Y UTILIDADES
+// ======================================================================
 
-// Lista de estados de pago válidos (array literal para z.enum)
-const paymentStatuses = [
-  'requires_payment_method',
-  'requires_confirmation',
-  'requires_action',
-  'processing',
-  'requires_capture',
-  'cancelled',
-  'succeeded',
-  'failed',
-  'partially_captured',
-  'partially_captured_and_capturable'
-] as const
+// Helper para obtener variables de entorno
+const env = {
+  HYPERSWITCH_BASE_URL: process.env.HYPERSWITCH_BASE_URL || 'https://sandbox.hyperswitch.io',
+  HYPERSWITCH_API_KEY: process.env.HYPERSWITCH_API_KEY,
+}
 
-// Schema de validación para crear pagos
+// Validación de la API key
+if (!env.HYPERSWITCH_API_KEY) {
+  throw new Error('HYPERSWITCH_API_KEY is required')
+}
+
+// Helper para respuestas de error estandarizadas
+function errorResponse(message: string, status: number = 400, code?: string) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        type: 'api_error',
+        message,
+        code: code || 'INVALID_REQUEST',
+      },
+    },
+    { status }
+  )
+}
+
+// Cliente HTTP personalizado para Hyperswitch
+async function hyperswitchRequest<T = any>(
+  endpoint: string,
+  options: {
+    method?: string
+    body?: any
+    queryParams?: Record<string, any>
+    merchantId?: string
+    profileId?: string
+  } = {}
+): Promise<T> {
+  const { method = 'GET', body, queryParams, merchantId, profileId } = options
+
+  // Construir URL
+  const url = new URL(endpoint, env.HYPERSWITCH_BASE_URL)
+  
+  // Añadir query parameters
+  if (queryParams) {
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.append(key, String(value))
+      }
+    })
+  }
+
+  // Configurar headers
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${env.HYPERSWITCH_API_KEY}`,
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  }
+
+  // Añadir headers de contexto de merchant
+  if (merchantId) headers['X-Merchant-Id'] = merchantId
+  if (profileId) headers['X-Profile-Id'] = profileId
+
+  try {
+    const response = await fetch(url.toString(), {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw {
+        status: response.status,
+        error: data.error || data,
+        message: data.error?.message || data.message || response.statusText,
+      }
+    }
+
+    return data
+  } catch (error: any) {
+    console.error('Hyperswitch API Error:', error)
+    throw error
+  }
+}
+
+// ======================================================================
+// SCHEMAS DE VALIDACIÓN (Basados en documentación Hyperswitch)
+// ======================================================================
+
+// Schema para crear pagos - Siguiendo la documentación oficial
 const createPaymentSchema = z.object({
-  amount: z.number().min(50, 'Monto mínimo: 50 centavos').max(999999999, 'Monto máximo excedido'),
-  currency: z.string().min(3).max(3).toUpperCase(),
+  amount: z.number().int().min(1, 'Amount must be at least 1').max(999999999),
+  currency: z.string().length(3, 'Currency must be 3 characters'),
   customer_id: z.string().optional(),
-  description: z.string().max(1000, 'Descripción muy larga').optional(),
-  statement_descriptor: z.string().max(22, 'Descriptor muy largo').optional(),
+  description: z.string().max(1000).optional(),
+  statement_descriptor: z.string().max(22).optional(),
   payment_method_type: z.enum([
     'card', 'wallet', 'bank_redirect', 'bank_transfer', 
     'pay_later', 'crypto', 'bank_debit', 'reward'
   ]).optional(),
   capture_method: z.enum(['automatic', 'manual']).default('automatic'),
   confirm: z.boolean().default(false),
-  return_url: z.string().url('URL inválida').optional(),
+  return_url: z.string().url().optional(),
   metadata: z.record(z.any()).optional(),
   customer: z.object({
     name: z.string().max(100).optional(),
-    email: z.string().email('Email inválido').optional(),
+    email: z.string().email().optional(),
     phone: z.string().max(20).optional(),
     phone_country_code: z.string().max(5).optional(),
   }).optional(),
@@ -74,38 +141,43 @@ const createPaymentSchema = z.object({
     name: z.string().max(100).optional(),
     email: z.string().email().optional(),
   }).optional(),
-  // Corregido: Array de conectores válidos en lugar de strings genéricos
-  connector: z.array(z.enum(validConnectors)).optional(),
   business_country: z.string().length(2).optional(),
   business_label: z.string().max(50).optional(),
   profile_id: z.string().optional(),
 })
 
-// Schema para listar pagos - Corregido el enum de estados
+// Schema para listar pagos
 const listPaymentsSchema = z.object({
-  limit: z.coerce.number().min(1).max(100).default(10),
-  offset: z.coerce.number().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  offset: z.coerce.number().int().min(0).default(0),
   customer_id: z.string().optional(),
   payment_id: z.string().optional(),
   profile_id: z.string().optional(),
-  created: z.string().optional(), // ISO date
+  created: z.string().optional(),
   created_lt: z.string().optional(),
   created_gt: z.string().optional(),
   created_lte: z.string().optional(),
   created_gte: z.string().optional(),
-  // Corregido: usar array literal en lugar de tipo
-  status: z.enum(paymentStatuses).optional(),
+  status: z.enum([
+    'requires_payment_method',
+    'requires_confirmation', 
+    'requires_action',
+    'processing',
+    'requires_capture',
+    'cancelled',
+    'succeeded',
+    'failed',
+    'partially_captured',
+    'partially_captured_and_capturable'
+  ]).optional(),
   currency: z.string().length(3).optional(),
-  amount: z.coerce.number().optional(),
+  amount: z.coerce.number().int().optional(),
   connector: z.string().optional(),
 })
 
-// Interfaz para la respuesta de listado de pagos
-interface PaymentListResponse {
-  data: PaymentResponse[]
-  has_more: boolean
-  total_count: number
-}
+// ======================================================================
+// HANDLERS DE API
+// ======================================================================
 
 // GET /api/payments - Listar pagos
 export async function GET(request: NextRequest) {
@@ -116,67 +188,52 @@ export async function GET(request: NextRequest) {
     // Validar parámetros
     const validatedParams = listPaymentsSchema.parse(searchParams)
     
-    // Construir query string para Hyperswitch
-    const queryParams = new URLSearchParams()
-    Object.entries(validatedParams).forEach(([key, value]) => {
-      if (value !== undefined) {
-        queryParams.append(key, String(value))
-      }
-    })
+    // Obtener headers de contexto
+    const merchantId = request.headers.get('x-merchant-id')
+    const profileId = request.headers.get('x-profile-id')
     
-    // Realizar petición a Hyperswitch usando método público tipado
-    const paymentsResponse = await hyperswitchClient.get<PaymentListResponse>(
-      `/payments/list`,
-      Object.fromEntries(queryParams.entries())
-    ) as PaymentListResponse
+    // Realizar petición a Hyperswitch
+    const payments = await hyperswitchRequest('/payments/list', {
+      method: 'GET',
+      queryParams: validatedParams,
+      merchantId: merchantId || undefined,
+      profileId: profileId || undefined,
+    })
     
     return NextResponse.json({
       success: true,
-      data: paymentsResponse.data || [],
+      data: payments.data || [],
       pagination: {
         limit: validatedParams.limit,
         offset: validatedParams.offset,
-        has_more: paymentsResponse.has_more || false,
-        total_count: paymentsResponse.total_count || 0,
+        has_more: payments.has_more || false,
+        total_count: payments.total_count || 0,
       }
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error listing payments:', error)
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'Parámetros inválidos',
-          details: error.errors 
-        },
-        { status: 400 }
-      )
+      return errorResponse('Invalid parameters', 400, 'VALIDATION_ERROR')
     }
 
     // Error de Hyperswitch
-    if (typeof error === 'object' && error !== null && 'status_code' in error) {
+    if (error.status) {
       return NextResponse.json(
         { 
           success: false,
-          error: (error as any).error_message || 'Error de Hyperswitch',
-          code: (error as any).error_code 
+          error: {
+            type: 'hyperswitch_error',
+            message: error.message || 'Hyperswitch API error',
+            code: error.error?.code || 'API_ERROR'
+          }
         },
-        { status: (error as any).status_code }
+        { status: error.status }
       )
     }
 
-    return NextResponse.json(
-      { 
-        success: false,
-        error: 'Error interno del servidor',
-        details: process.env.NODE_ENV === 'development' ? 
-          (error instanceof Error ? error.message : String(error)) : 
-          undefined
-      },
-      { status: 500 }
-    )
+    return errorResponse('Internal server error', 500, 'INTERNAL_ERROR')
   }
 }
 
@@ -188,27 +245,16 @@ export async function POST(request: NextRequest) {
     // Validar datos de entrada
     const validatedData = createPaymentSchema.parse(body)
     
-    // Obtener merchant ID de headers (establecido por middleware)
+    // Obtener headers de contexto
     const merchantId = request.headers.get('x-merchant-id')
+    const profileId = request.headers.get('x-profile-id')
     
-    if (!merchantId) {
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'Merchant ID no encontrado. Verifique su autenticación.' 
-        },
-        { status: 401 }
-      )
-    }
-    
-    // Preparar datos del pago con tipos correctos
-    const paymentData: PaymentRequest = {
+    // Preparar datos del pago
+    const paymentData = {
       ...validatedData,
-      // Convertir el array de string a Connector[] si existe
-      connector: validatedData.connector as Connector[] | undefined,
-      // Agregar datos adicionales requeridos por Hyperswitch
+      // Valores por defecto para Honduras
       business_country: validatedData.business_country || 'HN',
-      business_label: validatedData.business_label || 'TradecorpHN',
+      business_label: validatedData.business_label || 'Multipaga',
     }
     
     // Si no se especifica return_url, usar una por defecto
@@ -217,19 +263,21 @@ export async function POST(request: NextRequest) {
       paymentData.return_url = `${baseUrl}/payments/complete`
     }
     
-    // Crear pago en Hyperswitch usando método público tipado
-    const payment = await hyperswitchClient.post<PaymentResponse>('/payments', paymentData)
+    // Crear pago en Hyperswitch
+    const payment = await hyperswitchRequest('/payments', {
+      method: 'POST',
+      body: paymentData,
+      merchantId: merchantId || undefined,
+      profileId: profileId || undefined,
+    })
     
-    // Log del pago creado para auditoría
+    // Log del pago creado
     console.info('Payment created:', {
       payment_id: payment.payment_id,
       merchant_id: merchantId,
       amount: payment.amount,
       currency: payment.currency,
       status: payment.status,
-      ip: request.headers.get('x-forwarded-for') || 
-          request.headers.get('x-real-ip') || 
-          'unknown'
     })
     
     return NextResponse.json({
@@ -237,75 +285,50 @@ export async function POST(request: NextRequest) {
       data: payment
     }, { status: 201 })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating payment:', error)
 
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'Datos de pago inválidos',
-          details: error.errors 
-        },
-        { status: 400 }
-      )
+      return errorResponse('Invalid payment data', 400, 'VALIDATION_ERROR')
     }
 
     // Error de Hyperswitch
-    if (typeof error === 'object' && error !== null && 'status_code' in error) {
-      const hyperswitchError = error as any
-      
+    if (error.status) {
       return NextResponse.json(
         { 
           success: false,
-          error: hyperswitchError.error_message || 'Error procesando el pago',
-          code: hyperswitchError.error_code,
-          type: hyperswitchError.type 
+          error: {
+            type: 'hyperswitch_error',
+            message: error.message || 'Payment creation failed',
+            code: error.error?.code || 'PAYMENT_ERROR'
+          }
         },
-        { status: hyperswitchError.status_code }
+        { status: error.status }
       )
     }
 
-    return NextResponse.json(
-      { 
-        success: false,
-        error: 'Error interno del servidor',
-        details: process.env.NODE_ENV === 'development' ? 
-          (error instanceof Error ? error.message : String(error)) : 
-          undefined
-      },
-      { status: 500 }
-    )
+    return errorResponse('Internal server error', 500, 'INTERNAL_ERROR')
   }
 }
 
-// PUT /api/payments - Actualizar configuración de pagos (batch operations)
+// PUT /api/payments - Operaciones en lote
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
     
-    // Validar que sea una operación de batch válida
+    // Validar operación de batch
     if (!body.operation || !body.payment_ids || !Array.isArray(body.payment_ids)) {
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'Operación de batch inválida. Se requiere operation y payment_ids.' 
-        },
-        { status: 400 }
-      )
+      return errorResponse('Invalid batch operation. Requires operation and payment_ids.')
     }
     
     const { operation, payment_ids, ...operationData } = body
     
     if (payment_ids.length === 0 || payment_ids.length > 50) {
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'Número de payment_ids inválido (1-50).' 
-        },
-        { status: 400 }
-      )
+      return errorResponse('Invalid number of payment_ids (1-50).')
     }
+    
+    const merchantId = request.headers.get('x-merchant-id')
+    const profileId = request.headers.get('x-profile-id')
     
     const results = []
     const errors = []
@@ -313,23 +336,27 @@ export async function PUT(request: NextRequest) {
     // Procesar operaciones en batch
     for (const paymentId of payment_ids) {
       try {
-        let result: PaymentResponse
+        let result
         
         switch (operation) {
           case 'cancel':
-            result = await hyperswitchClient.post<PaymentResponse>(
-              `/payments/${paymentId}/cancel`, 
-              operationData
-            )
+            result = await hyperswitchRequest(`/payments/${paymentId}/cancel`, {
+              method: 'POST',
+              body: operationData,
+              merchantId: merchantId || undefined,
+              profileId: profileId || undefined,
+            })
             break
           case 'capture':
-            result = await hyperswitchClient.post<PaymentResponse>(
-              `/payments/${paymentId}/capture`, 
-              operationData
-            )
+            result = await hyperswitchRequest(`/payments/${paymentId}/capture`, {
+              method: 'POST',
+              body: operationData,
+              merchantId: merchantId || undefined,
+              profileId: profileId || undefined,
+            })
             break
           default:
-            throw new Error(`Operación '${operation}' no soportada`)
+            throw new Error(`Operation '${operation}' not supported`)
         }
         
         results.push({
@@ -338,11 +365,11 @@ export async function PUT(request: NextRequest) {
           data: result
         })
         
-      } catch (error) {
+      } catch (error: any) {
         errors.push({
           payment_id: paymentId,
           success: false,
-          error: error instanceof Error ? error.message : String(error)
+          error: error.message || String(error)
         })
       }
     }
@@ -359,29 +386,13 @@ export async function PUT(request: NextRequest) {
       }
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in batch payment operation:', error)
-    
-    return NextResponse.json(
-      { 
-        success: false,
-        error: 'Error en operación de batch',
-        details: process.env.NODE_ENV === 'development' ? 
-          (error instanceof Error ? error.message : String(error)) : 
-          undefined
-      },
-      { status: 500 }
-    )
+    return errorResponse('Batch operation failed', 500, 'BATCH_ERROR')
   }
 }
 
-// DELETE /api/payments - No soportado (los pagos no se pueden eliminar)
+// DELETE - No soportado
 export async function DELETE() {
-  return NextResponse.json(
-    { 
-      success: false,
-      error: 'Los pagos no pueden ser eliminados. Use cancelación en su lugar.' 
-    },
-    { status: 405 }
-  )
+  return errorResponse('Payments cannot be deleted. Use cancellation instead.', 405, 'METHOD_NOT_ALLOWED')
 }

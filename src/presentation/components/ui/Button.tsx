@@ -1,8 +1,9 @@
-import * as React from 'react'
-import { Slot } from '@radix-ui/react-slot'
+// src/presentation/components/ui/Button.tsx
+// Componente Button corregido para soportar iconos correctamente
+
+import { forwardRef } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/presentation/lib/utils'
-import { Loader2 } from 'lucide-react'
 
 const buttonVariants = cva(
   'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
@@ -10,24 +11,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive:
-          'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline:
-          'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-        secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
-        gradient:
-          'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700',
-        glow:
-          'bg-primary text-primary-foreground shadow-[0_0_20px_rgba(139,92,246,0.5)] hover:shadow-[0_0_30px_rgba(139,92,246,0.8)] transition-all duration-300',
+        glow: 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-lg hover:shadow-xl hover:from-purple-600 hover:to-blue-600',
       },
       size: {
         default: 'h-10 px-4 py-2',
         sm: 'h-9 rounded-md px-3',
         lg: 'h-11 rounded-md px-8',
-        xl: 'h-12 px-10 text-base',
         icon: 'h-10 w-10',
       },
     },
@@ -42,35 +36,24 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
-  loading?: boolean
   leftIcon?: React.ReactNode
   rightIcon?: React.ReactNode
+  loading?: boolean
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ 
-    className, 
-    variant, 
-    size, 
-    asChild = false, 
-    loading = false,
-    disabled,
-    leftIcon,
-    rightIcon,
-    children,
-    ...props 
-  }, ref) => {
-    const Comp = asChild ? Slot : 'button'
-    
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, leftIcon, rightIcon, loading, children, disabled, ...props }, ref) => {
+    const isDisabled = disabled || loading
+
     return (
-      <Comp
+      <button
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        disabled={disabled || loading}
+        disabled={isDisabled}
         {...props}
       >
         {loading && (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
         )}
         {!loading && leftIcon && (
           <span className="mr-2">{leftIcon}</span>
@@ -79,7 +62,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {!loading && rightIcon && (
           <span className="ml-2">{rightIcon}</span>
         )}
-      </Comp>
+      </button>
     )
   }
 )
