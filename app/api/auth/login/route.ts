@@ -163,19 +163,21 @@ export async function POST(request: NextRequest) {
 
     // Handle non-OK responses
     if (!hyperswitchApiResponse.ok) {
+      const rawErrorText = await hyperswitchApiResponse.text();
+      logger.error({ ip, status: hyperswitchApiResponse.status, rawErrorText }, 'Hyperswitch API returned non-OK status');
       let errorMessage = 'No se pudo validar la API Key';
       let errorCode = `HS_${hyperswitchApiResponse.status}`;
       let details: Array<{ field?: string; message: string }> = [
         { field: 'apiKey', message: errorMessage },
       ];
       try {
-        const errorData = await hyperswitchApiResponse.json();
+        const errorData = JSON.parse(rawErrorText);
+        logger.error({ ip, status: hyperswitchApiResponse.status, errorCode, errorData }, 'Hyperswitch API request failed with error data');
         errorMessage = errorData.error?.message || errorMessage;
         errorCode = errorData.error?.code ? `HS_${errorData.error.code}` : errorCode;
         details = [{ field: 'apiKey', message: errorMessage }];
-        logger.error({ ip, status: hyperswitchApiResponse.status, errorCode, errorData }, 'Hyperswitch API request failed');
       } catch (error) {
-        logger.error({ ip, status: hyperswitchApiResponse.status, error }, 'Failed to parse error response');
+        logger.error({ ip, status: hyperswitchApiResponse.status, error, rawErrorText }, 'Failed to parse error response from Hyperswitch API, raw text provided');
       }
       return NextResponse.json(
         { success: false, error: errorMessage, code: errorCode, details },

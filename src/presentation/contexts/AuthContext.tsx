@@ -212,17 +212,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         const rawResponse = await response.text();
-        console.log('Raw login response:', rawResponse); // Debug
+        console.log("Raw login response:", rawResponse); // Debug
         let data;
         try {
           data = LoginResponseSchema.parse(JSON.parse(rawResponse));
+          console.log("Parsed login response data:", data); // Debug
         } catch (parseError) {
-          console.error('Error parsing login response:', parseError, { rawResponse });
-          throw new Error('Respuesta inválida del servidor');
+          console.error("Error parsing login response:", parseError, { rawResponse });
+          throw new Error("Respuesta inválida del servidor");
         }
 
         if (!response.ok || !data.success) {
-          const errorMessage = data.error || 'Error al iniciar sesión';
+          const errorMessage = data.error || "Error al iniciar sesión";
           setError(errorMessage);
           toast.error(errorMessage);
           return {

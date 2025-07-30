@@ -1,4 +1,3 @@
-
 'use client'
 
 import { useState, useEffect } from 'react';
@@ -34,214 +33,190 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
+  
+  // Form setup
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+    watch,
+    setValue,
+    reset,
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onChange',
+    defaultValues: {
+      apiKey: '',
+      environment: 'sandbox',
+    },
+  });
+
+  // State variables
   const [showApiKey, setShowApiKey] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const [copiedField, setCopiedField] = useState<'apiKey' | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  // Initialize environment with a default value that can be safely rendered on server
-  // This state will be updated on the client-side after hydration if a cookie exists.
   const [environment, setEnvironment] = useState<'sandbox' | 'production'>('sandbox');
   const [validationStatus, setValidationStatus] = useState<'idle' | 'validating' | 'valid' | 'invalid'>('idle');
+  const [mounted, setMounted] = useState(false);
+
+  // Watch form values
+  const apiKey = watch('apiKey');
+
+  // Get reason from search params
+  const reason = searchParams?.get('reason');
+  const reasonMessages: Record<string, string> = {
+    session_expired: 'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.',
+    unauthorized: 'No tienes autorización para acceder a esta página.',
+    invalid_token: 'Token de sesión inválido. Por favor, inicia sesión nuevamente.',
+  };
 
   // Load environment from cookie client-side only after hydration
   useEffect(() => {
+    setMounted(true);
     // This effect runs only on the client after initial render (hydration)
     const cookieEnv = document.cookie.match(/hyperswitch_env=([^;]+)/)?.[1] as 'sandbox' | 'production';
     if (cookieEnv) {
       setEnvironment(cookieEnv);
-      // Ensure the form value is also updated after client-side hydration
       setValue('environment', cookieEnv);
     }
-  }, []); // Empty dependency array ensures this runs once after initial render
+  }, [setValue]);
 
-  // Messages for redirection reasons
-  const reasonMessages = {
-    session_expired: 'Tu sesión ha expirado. Por favor inicia sesión nuevamente.',
-    invalid_session: 'Sesión inválida detectada. Por favor inicia sesión nuevamente.',
-    logout: 'Has cerrado sesión exitosamente.',
-  } as const;
-
-  const reason = searchParams?.get('reason') as keyof typeof reasonMessages | null;
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isValid },
-    setError,
-    watch,
-    reset,
-    clearErrors,
-    setValue,
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      apiKey: '',
-      environment: 'sandbox', // Initial default value for both server and client
-    },
-    mode: 'onChange',
-  });
-
-  const apiKey = watch('apiKey');
-
-  // Sync environment with form and cookie
+  // API Key validation effect
   useEffect(() => {
-    setValue('environment', environment);
-    // Only set cookie on client-side to avoid hydration mismatch
-    if (typeof document !== 'undefined') {
-      document.cookie = `hyperswitch_env=${environment}; path=/; max-age=${30 * 24 * 3600}; secure=${
-        process.env.NODE_ENV === 'production'
-      }; samesite=strict`;
-    }
-  }, [environment, setValue]);
-
-  useEffect(() => {
-    if (authError) {
-      toast.error(authError, { duration: 4000 });
-    }
-  }, [authError]);
-
-  // Copy to clipboard
-  const copyToClipboard = async (text: string, field: 'apiKey') => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      toast.success('API Key copiada al portapapeles', { duration: 2000 });
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch (error) {
-      toast.error('Error al copiar al portapapeles');
-    }
-  };
-
-  // Reset form
-  const handleReset = () => {
-    reset();
-    setShowApiKey(false);
-    setAuthError(null);
-    setValidationStatus('idle');
-    clearErrors();
-  };
-
-  // Validate API Key in real-time (debounced)
-  useEffect(() => {
-    if (!apiKey || apiKey.length < 10 || !apiKey.startsWith('snd_')) {
+    if (!apiKey || apiKey.length < 10) {
       setValidationStatus('idle');
       return;
     }
 
-    const timeoutId = setTimeout(async () => {
+    const validateApiKey = async () => {
       setValidationStatus('validating');
       try {
-        const response = await fetch('/api/auth/validate-api-key', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey, environment }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.valid) {
-            setValidationStatus('valid');
-            clearErrors('apiKey');
-          } else {
-            setValidationStatus('invalid');
-            setError('apiKey', { message: data.error || 'API Key inválida' });
-          }
+        // Simulate API validation - replace with actual validation
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Basic validation - in real implementation, you'd call the API
+        if (apiKey.startsWith('snd_') && apiKey.length > 20) {
+          setValidationStatus('valid');
+          setAuthError(null);
         } else {
           setValidationStatus('invalid');
-          const errorData = await response.json();
-          setError('apiKey', { message: errorData.error || 'Error al validar la API Key' });
+          setAuthError('API Key inválida');
         }
       } catch (error) {
         setValidationStatus('invalid');
-        setError('apiKey', { message: 'Error al validar la API Key' });
+        setAuthError('Error al validar la API Key');
       }
-    }, 1000); // 1 second debounce
+    };
 
+    const timeoutId = setTimeout(validateApiKey, 500);
     return () => clearTimeout(timeoutId);
-  }, [apiKey, environment, setError, clearErrors]);
+  }, [apiKey]);
 
   // Handle form submission
   const onSubmit = async (data: LoginFormData) => {
     setIsSubmitting(true);
     setAuthError(null);
-    clearErrors();
 
     try {
-      const result: LoginResult = await login({
-        apiKey: data.apiKey.trim(),
-        environment: data.environment,
-      });
-
+      // Set environment cookie
+      document.cookie = `hyperswitch_env=${data.environment}; path=/; max-age=${7 * 24 * 60 * 60}`;
+      
+      const result = await login(data);
+      
       if (result.success) {
         setLoginSuccess(true);
-        toast.success('¡Autenticación exitosa!', {
-          icon: '🎉',
-          duration: 2000,
-        });
+        toast.success('¡Login exitoso!');
         
-        // Show success animation before redirect
+        // Redirect after success
         setTimeout(() => {
-router.push('/dashboard');
+          const redirectUrl = searchParams?.get('redirect') || '/dashboard';
+          router.push(redirectUrl);
         }, 1500);
       } else {
-        const message = result.error || 'Error de autenticación';
-        setError('root', { message });
-        setAuthError(message);
-        setValidationStatus('invalid');
-        
-        // Handle specific error codes
-        if (result.code === 'INVALID_API_KEY') {
-          setError('apiKey', { message: 'API Key inválida o sin permisos' });
-        } else if (result.code === 'NO_CUSTOMERS_FOUND') {
-          setError('apiKey', { message: 'API Key válida pero no se encontraron clientes' });
-        } else if (result.code === 'REQUEST_TIMEOUT') {
-          toast.error('Tiempo de espera agotado. Intenta nuevamente.', { duration: 5000 });
-        } else if (result.code === 'NETWORK_ERROR') {
-          toast.error('Error de conexión. Verifica tu internet.', { duration: 5000 });
-        }
-        
+        setAuthError(result.error || 'Error al iniciar sesión');
         if (result.details) {
-          result.details.forEach((detail: { field?: string; message: string }) => {
-            if (detail.field && detail.field !== 'root') {
-              setError(detail.field as keyof LoginFormData, { message: detail.message });
-            }
+          result.details.forEach(detail => {
+            toast.error(detail.message);
           });
         }
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Error inesperado al procesar la solicitud';
-      setError('root', { message });
-      setAuthError(message);
-      setValidationStatus('invalid');
-      toast.error(message, { duration: 5000 });
+      console.error('Login error:', error);
+      setAuthError('Error inesperado al iniciar sesión');
+      toast.error('Error inesperado al iniciar sesión');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Get validation icon
-  const getValidationIcon = () => {
-    switch (validationStatus) {
-      case 'validating':
-        return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
-      case 'valid':
-        return <CheckCircle2 className="w-4 h-4 text-green-400" />;
-      case 'invalid':
-        return <AlertCircle className="w-4 h-4 text-red-400" />;
-      default:
-        return null;
+  // Handle form reset
+  const handleReset = () => {
+    reset();
+    setAuthError(null);
+    setValidationStatus('idle');
+    setEnvironment('sandbox');
+    document.cookie = 'hyperswitch_env=sandbox; path=/; max-age=' + (7 * 24 * 60 * 60);
+  };
+
+  // Copy to clipboard function
+  const copyToClipboard = async (text: string, field: 'apiKey') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      toast.success('Copiado al portapapeles');
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (error) {
+      toast.error('Error al copiar');
     }
   };
 
-  // Get input border color based on validation
+  // Get input border color based on validation status
   const getInputBorderColor = () => {
     if (errors.apiKey) return 'border-red-500';
     if (validationStatus === 'valid') return 'border-green-500';
     if (validationStatus === 'invalid') return 'border-red-500';
-    if (apiKey && apiKey.length > 0) return 'border-blue-400';
     return 'border-gray-600';
   };
+
+  // Get validation icon
+  const getValidationIcon = () => {
+    if (validationStatus === 'validating') {
+      return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
+    }
+    if (validationStatus === 'valid') {
+      return <CheckCircle2 className="w-4 h-4 text-green-400" />;
+    }
+    if (validationStatus === 'invalid') {
+      return <AlertCircle className="w-4 h-4 text-red-400" />;
+    }
+    return null;
+  };
+
+  // Handle environment change
+  const handleEnvironmentChange = (newEnvironment: 'sandbox' | 'production') => {
+    setEnvironment(newEnvironment);
+    setValue('environment', newEnvironment);
+    document.cookie = `hyperswitch_env=${newEnvironment}; path=/; max-age=${7 * 24 * 60 * 60}`;
+  };
+
+  // Don't render until mounted to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-4 sm:p-8 flex items-center justify-center">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <Shield className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold text-white mb-2">Multipaga Dashboard</h1>
+            <p className="text-gray-300 text-base">Cargando...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 p-4 sm:p-8 flex items-center justify-center">
@@ -347,7 +322,7 @@ router.push('/dashboard');
                     type="radio"
                     value="sandbox"
                     checked={environment === 'sandbox'}
-                    onChange={() => setEnvironment('sandbox')}
+                    onChange={() => handleEnvironmentChange('sandbox')}
                     className="text-blue-600"
                     disabled={isSubmitting}
                   />
@@ -361,7 +336,7 @@ router.push('/dashboard');
                     type="radio"
                     value="production"
                     checked={environment === 'production'}
-                    onChange={() => setEnvironment('production')}
+                    onChange={() => handleEnvironmentChange('production')}
                     className="text-blue-600"
                     disabled={isSubmitting}
                   />
@@ -527,5 +502,4 @@ router.push('/dashboard');
     </div>
   );
 }
-
 
