@@ -215,7 +215,7 @@ export function useRefunds(): UseRefundsReturn {
     options: RequestInit = {}
   ): Promise<T> => {
     // Validar autenticación
-    if (!authState?.isAuthenticated || !authState?.apiKey || !authState?.merchantId || !authState?.profileId) {
+    if (!authState?.isAuthenticated || !authState?.merchantId || !authState?.profileId) {
       throw new RefundApiError('AUTH_REQUIRED', 'Autenticación requerida. Por favor inicie sesión.', 401)
     }
 
@@ -228,7 +228,7 @@ export function useRefunds(): UseRefundsReturn {
       'Accept': 'application/json',
       'X-Merchant-Id': authState.merchantId,
       'X-Profile-Id': authState.profileId,
-      'Authorization': `Bearer ${authState.apiKey}`,
+      // Skip Authorization header since apiKey is not available in authState
       ...options.headers,
     })
 

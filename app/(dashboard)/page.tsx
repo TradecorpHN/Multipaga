@@ -54,8 +54,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
-
-// Importar hooks y contextos reales del proyecto
+import { HyperswitchProvider } from '@/presentation/contexts/HyperswitchContext'
 import { useAuth } from '@/presentation/contexts/AuthContext'
 import { usePayments } from '@/presentation/hooks/usePayments'
 import { useConnectors } from '@/presentation/hooks/useConnectors'
@@ -101,7 +100,6 @@ const PremiumBackground = () => {
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {/* Elementos de fondo sutiles con animaciones mejoradas */}
       <div className="absolute -inset-10 opacity-15">
         <motion.div 
           className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl"
@@ -149,7 +147,6 @@ const PremiumBackground = () => {
         />
       </div>
       
-      {/* Partículas flotantes */}
       <div className="absolute inset-0">
         {Array.from({ length: 20 }, (_, i) => (
           <motion.div
@@ -441,10 +438,8 @@ const ModuleCard = ({ module }: { module: DashboardModule }) => {
           : 'opacity-70'
         }
       `}>
-        {/* Efecto de brillo en hover */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
         
-        {/* Indicador de estado mejorado */}
         <div className={`absolute top-4 right-4 w-3 h-3 rounded-full shadow-lg ${
           module.status.available 
             ? 'bg-green-400 shadow-green-400/50 animate-pulse' 
@@ -557,7 +552,6 @@ const ConnectorCard = ({ connector }: { connector: any }) => {
           : 'border-white/20 opacity-70'
         }
       `}>
-        {/* Efecto de brillo */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
         
         <div className="relative flex items-center gap-5">
@@ -621,18 +615,28 @@ const ConnectorCard = ({ connector }: { connector: any }) => {
   )
 }
 
+// Componente principal envuelto en HyperswitchProvider
 export default function DashboardPage() {
+  return (
+    <HyperswitchProvider>
+      <DashboardContent />
+    </HyperswitchProvider>
+  )
+}
+
+// Componente de contenido del dashboard
+function DashboardContent() {
   const isClient = useIsClient()
   const router = useRouter()
   
   // Hooks reales del proyecto
   const { authState, isLoading: authLoading } = useAuth()
   const { 
-    payments,
-    isLoading: paymentsLoading,
-    error: paymentsError,
-    totalCount: paymentsCount,
-    refreshPayments
+    payments = [],
+    isLoading: paymentsLoading = false,
+    error: paymentsError = null,
+    totalCount: paymentsCount = 0,
+    refreshPayments = async () => {}
   } = usePayments()
   
   const {
@@ -680,7 +684,6 @@ export default function DashboardPage() {
 
   // Módulos del dashboard con TODAS las rutas correctas basadas en la estructura de carpetas
   const dashboardModules: DashboardModule[] = useMemo(() => [
-    // Módulos Core
     {
       id: 'payments',
       title: 'Pagos',
@@ -741,8 +744,6 @@ export default function DashboardPage() {
         { label: 'Agregar conector', href: '/connectors/new', variant: 'secondary' }
       ]
     },
-    
-    // Módulos Financieros
     {
       id: 'refunds',
       title: 'Reembolsos',
@@ -843,8 +844,6 @@ export default function DashboardPage() {
       ],
       requiresConnector: true
     },
-    
-    // Módulos de Gestión
     {
       id: 'customers',
       title: 'Clientes',
@@ -903,8 +902,6 @@ export default function DashboardPage() {
       ],
       requiresConnector: true
     },
-    
-    // Módulos de Seguridad
     {
       id: 'vault',
       title: 'Vault',
@@ -1060,11 +1057,9 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900 text-white overflow-auto">
-      {/* Fondo animado premium */}
       <PremiumBackground />
 
       <div className="relative z-10 w-full min-h-full py-8 px-6 space-y-10">
-        {/* Header premium mejorado */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1109,7 +1104,6 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Métricas principales mejoradas */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1150,7 +1144,6 @@ export default function DashboardPage() {
           />
         </motion.div>
 
-        {/* Módulos del dashboard organizados por categoría */}
         {Object.entries(modulesByCategory).map(([category, modules], categoryIndex) => (
           <motion.div
             key={category}
@@ -1185,7 +1178,6 @@ export default function DashboardPage() {
           </motion.div>
         ))}
 
-        {/* Conectores activos mejorados */}
         {safeConnectors.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1221,7 +1213,6 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
-        {/* Footer con información adicional */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -1236,4 +1227,3 @@ export default function DashboardPage() {
     </div>
   )
 }
-

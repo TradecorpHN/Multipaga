@@ -1,55 +1,68 @@
+'use client';
 
-import { NextRequest, NextResponse } from 'next/server';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { z } from 'zod';
+import toast from 'react-hot-toast';
+import Cookies from 'js-cookie';
 import pino from 'pino';
-import { RateLimiterMemory } from 'rate-limiter-flexible';
-import { cookies } from 'next/headers';
 
-// Logger
+// Logger with redaction for sensitive data
 const logger = pino({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-  base: { pid: process.pid, hostname: process.env.HOSTNAME || 'unknown' },
+  browser: { asObject: true },
+  redact: ['apiKey', 'customerId', 'merchantId', 'profileId'],
 });
 
-// Rate Limiter
-const rateLimiter = new RateLimiterMemory({
-  points: 10,
-  duration: 60,
-});
-
-// Constants
-const API_TIMEOUT = 15000;
+// Configuration
 const API_URLS = {
   sandbox: 'https://sandbox.hyperswitch.io',
   production: 'https://api.hyperswitch.io',
 };
+
+const ENDPOINTS = {
+  login: '/api/auth/login',
+  refresh: '/api/auth/refresh',
+  logout: '/api/auth/logout',
+  customersList: '/customers/list',
+  paymentsList: '/payments/list',
+  createPayment: '/payments',
+  retrievePayment: (paymentId: string) => `/payments/${paymentId}`,
+};
+
+const SESSION_COOKIE = 'hyperswitch_session';
+const REFRESH_MARGIN = 5 * 60 * 1000; // 5 minutes
 const MAX_RETRIES = 2;
+const BASE_RETRY_DELAY = 1000;
+const API_TIMEOUT = 15000;
 
-// Validation schema
-const loginSchema = z.object({
-  apiKey: z.string().regex(/^(snd_[a-zA-Z0-9]{10,})$/, 'API Key debe comenzar con "snd_"'),
-  merchantId: z.string().regex(/^(merchant_[a-zA-Z0-9]{10,})$/, 'Merchant ID debe comenzar con "merchant_"'),
-  profileId: z.string().regex(/^(pro_[a-zA-Z0-9]{10,})$/, 'Profile ID debe comenzar con "pro_"'),
-  customerId: z.string().min(1, 'Customer ID es requerido'),
-  environment: z.enum(['sandbox', 'production']).default('sandbox'),
-});
+// Localization
+const messages = {
+  es: {
+    invalidSession: 'Sesión inválida o expirada',
+    loginError: 'Error al iniciar sesión',
+    invalidResponse: 'Respuesta inválida del servidor',
+    loginSuccess: '¡Login exitoso!',
+    logoutSuccess: 'Sesión cerrada exitosamente',
+    sessionCheckError: 'Error verificando sesión',
+    noSession: 'No hay sesión activa',
+    invalidCredentials: 'Credenciales inválidas',
+    fetchError: 'Error al cargar datos',
+  },
+  en: {
+    invalidSession: 'Invalid or expired session',
+    loginError: 'Login failed',
+    invalidResponse: 'Invalid server response',
+    loginSuccess: 'Login successful!',
+    logoutSuccess: 'Logged out successfully',
+    sessionCheckError: 'Error checking session',
+    noSession: 'No active session',
+    invalidCredentials: 'Invalid credentials',
+    fetchError: 'Failed to load data',
+  },
+};
 
-const customersListSchema = z.array(z.object({ customer_id: z.string().min(1) })).catch((ctx) => {
-  logger.warn({ error: ctx.error, input: ctx.input }, 'Flexible parsing for customersListSchema');
-  return ctx.input;
-});
-
-const businessProfileSchema = z.array(z.object({ profile_id: z.string().min(1) })).catch((ctx) => {
-  logger.warn({ error: ctx.error, input: ctx.input }, 'Flexible parsing for businessProfileSchema');
-  return ctx.input;
-});
-
-const customerSchema = z.object({ customer_id: z.string().min(1) }).catch((ctx) => {
-  logger.warn({ error: ctx.error, input: ctx.input }, 'Flexible parsing for customerSchema');
-  return ctx.input;
-});
-
-// Fetch with retry
+// Fetch with retry (exponential backoff)
 async function fetchWithRetry(url: string, options: RequestInit, retries: number): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -58,197 +71,472 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
       if (attempt === retries || (error instanceof Error && error.name !== 'AbortError')) {
         throw error;
       }
-      logger.warn({ url, attempt }, 'Retrying API request');
-      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      const delay = BASE_RETRY_DELAY * Math.pow(2, attempt);
+      logger.warn({ url, attempt, delay }, 'Retrying API request');
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
   throw new Error('Max retries reached');
 }
 
-export async function POST(request: NextRequest) {
-  const ip = request.ip || 'unknown';
-  const startTime = Date.now();
+// Schemas
+const AuthStateSchema = z.object({
+  customerId: z.string().min(1),
+  customerName: z.string().nullable(),
+  environment: z.enum(['sandbox', 'production']),
+  merchantId: z.string().min(1),
+  profileId: z.string().min(1),
+  isAuthenticated: z.boolean(),
+  expiresAt: z.string().datetime(),
+  apiKey: z.string().min(1),
+}).strict();
 
-  try {
-    // Rate limiting
+const LoginCredentialsSchema = z.object({
+  apiKey: z.string().min(1, 'API Key es requerida').min(10, 'API Key debe tener al menos 10 caracteres'),
+  merchantId: z.string().min(1, 'Merchant ID es requerido'),
+  profileId: z.string().min(1, 'Profile ID es requerido'),
+  customerId: z.string().min(1, 'Customer ID es requerido'),
+  environment: z.enum(['sandbox', 'production']).default('sandbox'),
+});
+
+const LoginResponseSchema = z.object({
+  success: z.boolean(),
+  code: z.string().optional(),
+  error: z.string().optional(),
+  details: z
+    .array(
+      z.object({
+        field: z.string().optional(),
+        message: z.string(),
+      })
+    )
+    .optional(),
+});
+
+const RefreshResponseSchema = z.object({
+  success: z.boolean(),
+  code: z.string().optional(),
+  error: z.string().optional(),
+  session: z
+    .object({
+      expires_at: z.string().datetime(),
+    })
+    .optional(),
+});
+
+type AuthState = z.infer<typeof AuthStateSchema>;
+type LoginCredentials = z.infer<typeof LoginCredentialsSchema>;
+type ErrorDetail = { field?: string; message: string };
+
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+  code?: string;
+  details?: ErrorDetail[];
+}
+
+interface AuthContextValue {
+  authState: AuthState | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  isCheckingSession: boolean;
+  error: string | null;
+  login: (credentials: LoginCredentials) => Promise<LoginResult>;
+  logout: (reason?: string) => Promise<void>;
+  clearError: () => void;
+  getApiHeaders: () => Record<string, string>;
+  fetchWithAuth: <T>(url: string, options?: RequestInit) => Promise<T>;
+}
+
+// Context
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+// Provider
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const language = 'es'; // TODO: Implement dynamic language detection
+
+  // Local state
+  const [authState, setAuthState] = useState<AuthState | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false); // Track login attempts
+
+  // Derived state
+  const isAuthenticated = authState?.isAuthenticated ?? false;
+
+  // Clear error
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // Get API headers
+  const getApiHeaders = useCallback((): Record<string, string> => {
+    if (!authState?.isAuthenticated) {
+      logger.error('No authenticated session');
+      throw new Error(messages[language].noSession);
+    }
+    const sessionCookie = Cookies.get(SESSION_COOKIE);
+    if (!sessionCookie) {
+      logger.error('Session cookie not found');
+      throw new Error(messages[language].noSession);
+    }
+    let sessionData;
     try {
-      await rateLimiter.consume(ip);
-    } catch (error) {
-      logger.warn({ ip }, 'Rate limit exceeded');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Demasiadas solicitudes, intenta de nuevo más tarde',
-          code: 'RATE_LIMIT_EXCEEDED',
-        },
-        { status: 429 }
-      );
+      sessionData = JSON.parse(sessionCookie);
+      logger.debug({ sessionData: { ...sessionData, apiKey: '[REDACTED]' } }, 'Parsed session cookie');
+    } catch (e) {
+      logger.error({ error: e }, 'Invalid session cookie');
+      throw new Error(messages[language].invalidSession);
     }
-
-    // Parse request body
-    let requestData: unknown;
-    try {
-      requestData = await request.json();
-      const loggableData = typeof requestData === 'object' && requestData !== null
-        ? { ...requestData, apiKey: '[REDACTED]' }
-        : { data: '[INVALID_REQUEST_DATA]' };
-      logger.debug({ ip, requestData: loggableData }, 'Raw request body');
-    } catch (error) {
-      logger.error({ ip, error }, 'Failed to parse request body');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Cuerpo de solicitud inválido',
-          code: 'INVALID_JSON',
-        },
-        { status: 400 }
-      );
+    const apiKey = sessionData.apiKey;
+    if (!apiKey) {
+      logger.error('Invalid API key in session cookie');
+      throw new Error(messages[language].invalidCredentials);
     }
+    return {
+      'Content-Type': 'application/json',
+      'api-key': apiKey,
+      'User-Agent': `NextjsApp/1.0 (${authState.environment})`,
+    };
+  }, [authState, language]);
 
-    // Validate request data
-    const parsedData = loginSchema.safeParse(requestData);
-    if (!parsedData.success) {
-      const details = parsedData.error.errors.map((e) => ({
-        field: e.path.join('.'),
-        message: e.message,
-      }));
-      logger.warn({ ip, details }, 'Invalid request data');
-      return NextResponse.json(
-        { success: false, error: 'Datos inválidos', code: 'VALIDATION_ERROR', details },
-        { status: 400 }
-      );
-    }
-
-    const { apiKey, merchantId, profileId, customerId, environment } = parsedData.data;
-    const apiUrl = API_URLS[environment];
-    logger.debug({ ip, environment }, 'Initiating Hyperswitch API authentication');
-
-    // Validate credentials with minimal requests
-    const errors: { field: string; message: string }[] = [];
-
-    // 1. Validate apiKey and merchantId with /account/{merchantId}/business_profile
-    let response = await fetchWithRetry(
-      `${apiUrl}/account/${merchantId}/business_profile`,
-      {
-        method: 'GET',
-        headers: {
-          'api-key': apiKey,
-          'Accept': 'application/json',
-          'User-Agent': 'NextjsApp/1.0',
-        },
-      },
-      MAX_RETRIES
-    );
-    if (!response.ok) {
-      const rawErrorText = await response.text();
-      let errorMessage = 'No se pudo validar la API Key o Merchant ID';
-      let errorCode = `HS_${response.status}`;
+  // Logout
+  const logout = useCallback(
+    async (reason?: string) => {
+      setIsLoading(true);
+      logger.info({ reason }, 'Initiating logout');
       try {
-        const errorData = JSON.parse(rawErrorText);
-        errorMessage = errorData.error?.message || 'API key o Merchant ID inválidos';
-        errorCode = errorData.error?.code ? `HS_${errorData.error.code}` : errorCode;
+        await fetch(ENDPOINTS.logout, { method: 'POST', credentials: 'include' });
       } catch (error) {
-        logger.error({ ip, status: response.status, rawErrorText }, 'Failed to parse business profile error');
+        logger.error({ error, reason }, 'Error during logout, continuing with client-side cleanup');
       }
-      errors.push(
-        { field: 'apiKey', message: errorMessage },
-        { field: 'merchantId', message: errorMessage }
-      );
-      logger.error({ ip, status: response.status, rawErrorText }, 'apiKey and merchantId validation failed');
-      return NextResponse.json(
-        { success: false, error: 'Credenciales inválidas', code: errorCode, details: errors },
-        { status: response.status === 401 ? 401 : 400 }
-      );
-    }
-    const businessProfileData = await response.json();
-    if (!businessProfileSchema.safeParse(businessProfileData).success || 
-        !businessProfileData.some((p: { profile_id: string }) => p.profile_id === profileId)) {
-      errors.push(
-        { field: 'merchantId', message: 'Formato de respuesta inválido para Merchant ID o Profile ID no encontrado' },
-        { field: 'profileId', message: 'Profile ID no encontrado o no asociado al Merchant ID' }
-      );
-      logger.warn({ ip, profileId, responseData: businessProfileData }, 'Invalid business profile response or Profile ID not found');
-      return NextResponse.json(
-        { success: false, error: 'Credenciales inválidas', code: 'INVALID_RESPONSE_FORMAT', details: errors },
-        { status: 400 }
-      );
-    }
+      setAuthState(null);
+      setError(null);
+      Cookies.remove(SESSION_COOKIE, { path: '/', secure: process.env.NODE_ENV === 'production', sameSite: 'strict' });
+      toast.success(messages[language].logoutSuccess);
+      const loginUrl = reason ? `/login?reason=${reason}` : '/login';
+      router.push(loginUrl);
+      setIsLoading(false);
+    },
+    [router, language]
+  );
 
-    // 2. Validate customerId
-    response = await fetchWithRetry(
-      `${apiUrl}/customers/${customerId}`,
-      {
-        method: 'GET',
-        headers: {
-          'api-key': apiKey,
-          'merchant-id': merchantId,
-          'Accept': 'application/json',
-          'User-Agent': 'NextjsApp/1.0',
-        },
-      },
-      MAX_RETRIES
-    );
-    if (!response.ok) {
-      const rawErrorText = await response.text();
-      let errorMessage = 'No se pudo validar el Customer ID';
-      let errorCode = `HS_${response.status}`;
+  // Check session
+  const checkSession = useCallback(
+    async (silent = true): Promise<boolean> => {
+      logger.debug({ pathname, silent }, 'Checking session');
       try {
-        const errorData = JSON.parse(rawErrorText);
-        errorMessage = errorData.error?.message || 'Customer ID no encontrado';
-        errorCode = errorData.error?.code ? `HS_${errorData.error.code}` : errorCode;
-      } catch (error) {
-        logger.error({ ip, status: response.status, rawErrorText }, 'Failed to parse customer error');
-      }
-      errors.push({ field: 'customerId', message: errorMessage });
-      logger.error({ ip, status: response.status, rawErrorText }, 'Customer ID validation failed');
-      return NextResponse.json(
-        { success: false, error: 'Credenciales inválidas', code: errorCode, details: errors },
-        { status: response.status === 404 ? 400 : response.status }
-      );
-    }
-    const customerData = await response.json();
-    if (!customerSchema.safeParse(customerData).success || customerData.customer_id !== customerId) {
-      errors.push({ field: 'customerId', message: 'Customer ID no encontrado o no coincide' });
-      logger.warn({ ip, customerId, responseData: customerData }, 'Invalid or mismatched Customer ID');
-      return NextResponse.json(
-        { success: false, error: 'Credenciales inválidas', code: 'INVALID_CUSTOMER_ID', details: errors },
-        { status: 400 }
-      );
-    }
+        setIsCheckingSession(true);
+        const sessionCookie = Cookies.get(SESSION_COOKIE);
+        if (!sessionCookie) {
+          logger.info('No session cookie found');
+          return false;
+        }
 
-    // Create session
-    const sessionData = {
-      customerId,
-      customerName: null,
-      environment,
-      merchantId,
-      profileId,
-      isAuthenticated: true,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
-      apiKey,
+        let sessionData;
+        try {
+          sessionData = JSON.parse(sessionCookie);
+          logger.debug({ sessionData: { ...sessionData, apiKey: '[REDACTED]' } }, 'Parsed session cookie');
+        } catch (error) {
+          logger.error({ error }, 'Invalid session cookie');
+          Cookies.remove(SESSION_COOKIE, { path: '/' });
+          return false;
+        }
+
+        const validatedSession = AuthStateSchema.safeParse(sessionData);
+        if (!validatedSession.success) {
+          logger.warn({ errors: validatedSession.error.errors }, 'Invalid session data');
+          Cookies.remove(SESSION_COOKIE, { path: '/' });
+          return false;
+        }
+
+        const { expiresAt } = validatedSession.data;
+        if (new Date(expiresAt) <= new Date()) {
+          logger.info('Session expired');
+          Cookies.remove(SESSION_COOKIE, { path: '/' });
+          return false;
+        }
+
+        // Use /api/auth/refresh to validate session
+        const response = await fetchWithRetry(
+          ENDPOINTS.refresh,
+          {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+          },
+          MAX_RETRIES
+        );
+
+        let data;
+        try {
+          data = RefreshResponseSchema.parse(await response.json());
+          logger.debug({ response: data }, 'Refresh response received');
+        } catch (error) {
+          logger.error({ error, status: response.status }, 'Error parsing refresh response');
+          throw new Error(messages[language].invalidResponse);
+        }
+
+        if (response.ok && data.success && data.session) {
+          const newAuthState: AuthState = {
+            ...validatedSession.data,
+            expiresAt: data.session.expires_at,
+          };
+          setAuthState(newAuthState);
+          setError(null);
+          logger.info({ newAuthState }, 'Session validated successfully');
+          return true;
+        } else {
+          logger.warn({ response: data }, 'Session validation failed');
+          setAuthState(null);
+          Cookies.remove(SESSION_COOKIE, { path: '/' });
+          if (!silent && data.error) {
+            setError(data.error);
+            toast.error(data.error);
+          }
+          return false;
+        }
+      } catch (error) {
+        logger.error({ error }, 'Error checking session');
+        setAuthState(null);
+        Cookies.remove(SESSION_COOKIE, { path: '/' });
+        if (!silent) {
+          const errorMessage = messages[language].sessionCheckError;
+          setError(errorMessage);
+          toast.error(errorMessage);
+        }
+        return false;
+      } finally {
+        setIsCheckingSession(false);
+      }
+    },
+    [language, pathname]
+  );
+
+  // Login
+  const login = useCallback(
+    async (credentials: LoginCredentials): Promise<LoginResult> => {
+      setIsLoading(true);
+      setIsLoggingIn(true); // Prevent redirects during login
+      setError(null);
+      logger.debug({ credentials: { ...credentials, apiKey: '[REDACTED]' } }, 'Attempting login');
+
+      try {
+        const validatedCredentials = LoginCredentialsSchema.parse(credentials);
+
+        const response = await fetch(ENDPOINTS.login, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(validatedCredentials),
+        });
+
+        let data;
+        try {
+          data = LoginResponseSchema.parse(await response.json());
+          logger.debug({ response: data }, 'Login response received');
+        } catch (error) {
+          logger.error({ error, status: response.status }, 'Error parsing login response');
+          throw new Error(messages[language].invalidResponse);
+        }
+
+        if (!response.ok || !data.success) {
+          const errorMessage = data.error || messages[language].loginError;
+          setError(errorMessage);
+          toast.error(errorMessage);
+          logger.warn({ response: data }, 'Login failed');
+          return {
+            success: false,
+            error: errorMessage,
+            code: data.code,
+            details: data.details,
+          };
+        }
+
+        // Since /api/auth/login doesn't return customer or session data, use credentials
+        const newAuthState: AuthState = {
+          customerId: validatedCredentials.customerId,
+          customerName: null,
+          environment: validatedCredentials.environment,
+          merchantId: validatedCredentials.merchantId,
+          profileId: validatedCredentials.profileId,
+          isAuthenticated: true,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Match backend
+          apiKey: validatedCredentials.apiKey,
+        };
+
+        setAuthState(newAuthState);
+        logger.info({ newAuthState }, 'Login successful, setting auth state');
+        toast.success(messages[language].loginSuccess);
+        router.push('/dashboard');
+        return { success: true };
+      } catch (error) {
+        logger.error({ error }, 'Login error');
+        let errorMessage = messages[language].loginError;
+        let details: ErrorDetail[] | undefined;
+        if (error instanceof z.ZodError) {
+          errorMessage = messages[language].invalidCredentials;
+          details = error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        setError(errorMessage);
+        toast.error(errorMessage);
+        return { success: false, error: errorMessage, details };
+      } finally {
+        setIsLoading(false);
+        setIsLoggingIn(false);
+      }
+    },
+    [router, language]
+  );
+
+  // Fetch with auth
+  const fetchWithAuth = useCallback(
+    async <T,>(url: string, options: RequestInit = {}): Promise<T> => {
+      if (!authState?.isAuthenticated) {
+        logger.error('No authenticated session');
+        throw new Error(messages[language].noSession);
+      }
+      const apiUrl = `${API_URLS[authState.environment]}${url.startsWith('/') ? url : `/${url}`}`;
+      logger.debug({ apiUrl, options }, 'Initiating fetch with auth');
+
+      let attempt = 0;
+      const attemptFetch = async (): Promise<T> => {
+        try {
+          const response = await fetchWithRetry(
+            apiUrl,
+            {
+              ...options,
+              headers: { ...getApiHeaders(), ...options.headers },
+              credentials: 'include',
+            },
+            MAX_RETRIES
+          );
+          if (!response.ok) {
+            let errorText;
+            try {
+              errorText = await response.json();
+              errorText = errorText.error || `HTTP ${response.status}`;
+            } catch {
+              errorText = `HTTP ${response.status}`;
+            }
+            logger.warn({ status: response.status, errorText }, 'API request failed');
+            if (response.status === 401 && attempt < MAX_RETRIES) {
+              attempt++;
+              await checkSession();
+              return attemptFetch();
+            }
+            throw new Error(errorText);
+          }
+          const data = await response.json();
+          logger.debug({ data }, 'API response received');
+          return data;
+        } catch (error) {
+          logger.error({ error, attempt, url: apiUrl }, 'Fetch with auth failed');
+          if (attempt >= MAX_RETRIES) {
+            const errorMessage = error instanceof Error ? error.message : messages[language].fetchError;
+            if (errorMessage.includes('Session expired')) {
+              logout('session_expired');
+            }
+            throw new Error(errorMessage);
+          }
+          attempt++;
+          const delay = BASE_RETRY_DELAY * Math.pow(2, attempt);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return attemptFetch();
+        }
+      };
+
+      return attemptFetch();
+    },
+    [authState, getApiHeaders, checkSession, logout, language]
+  );
+
+  // Effects
+  useEffect(() => {
+    const handleAuth = async () => {
+      if (!pathname || isLoggingIn) {
+        logger.debug({ pathname, isLoggingIn }, 'Skipping auth check during login or missing pathname');
+        return;
+      }
+      logger.debug({ pathname }, 'Handling auth check');
+      const isValidSession = await checkSession(true);
+      const isAuthRoute = pathname.startsWith('/login');
+      const isPublicRoute = ['/login', '/signup', '/forgot-password'].includes(pathname);
+
+      if (!isValidSession && !isPublicRoute && !isAuthRoute) {
+        const currentPath = encodeURIComponent(pathname + window.location.search);
+        logger.info({ currentPath }, 'Redirecting to login');
+        router.push(`/login?redirect=${currentPath}`);
+      } else if (isValidSession && isAuthRoute) {
+        logger.info('Redirecting to dashboard');
+        router.push('/dashboard');
+      }
     };
 
-    cookies().set({
-      name: 'hyperswitch_session',
-      value: JSON.stringify(sessionData),
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 24 * 60 * 60, // 24 hours
-    });
+    handleAuth();
+  }, [checkSession, pathname, router, isLoggingIn]);
 
-    logger.info({ ip, customerId, responseTime: Date.now() - startTime }, 'Login successful');
-    return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error) {
-    logger.error({ ip, error }, 'Unexpected error during login');
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Error inesperado al iniciar sesión',
-        code: 'UNEXPECTED_ERROR',
-      },
-      { status: 500 }
-    );
+  useEffect(() => {
+    if (!authState?.isAuthenticated) return;
+
+    const expiryTime = new Date(authState.expiresAt).getTime();
+    const currentTime = Date.now();
+    const timeUntilExpiry = expiryTime - currentTime;
+    const refreshTime = timeUntilExpiry - REFRESH_MARGIN;
+
+    if (refreshTime > 0) {
+      const timeoutId = setTimeout(() => checkSession(), refreshTime);
+      return () => clearTimeout(timeoutId);
+    } else if (timeUntilExpiry <= 0) {
+      logger.info('Session expired, logging out');
+      logout('session_expired');
+    }
+  }, [authState, logout, checkSession]);
+
+  // Context value
+  const contextValue: AuthContextValue = {
+    authState,
+    isLoading,
+    isAuthenticated,
+    isCheckingSession,
+    error,
+    login,
+    logout,
+    clearError,
+    getApiHeaders,
+    fetchWithAuth,
+  };
+
+
+}
+
+// Hooks
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth debe ser usado dentro de AuthProvider');
   }
+  return context;
+}
+
+export function useRequireAuth() {
+  const { isAuthenticated, isLoading, isCheckingSession } = useAuth();
+  return { isAuthenticated, isLoading, isCheckingSession };
+}
+
+export function useCustomer() {
+  const { authState } = useAuth();
+  return {
+    customerId: authState?.customerId,
+    customerName: authState?.customerName,
+    environment: authState?.environment,
+    merchantId: authState?.merchantId,
+    profileId: authState?.profileId,
+    isAuthenticated: authState?.isAuthenticated ?? false,
+  };
 }

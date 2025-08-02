@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { useConnectors } from '../hooks/useConnectors'; // Corrección de la importación
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import pino from 'pino';
@@ -18,12 +17,12 @@ const API_URLS = {
   sandbox: 'https://sandbox.hyperswitch.io',
   production: 'https://api.hyperswitch.io',
 };
-const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutes
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5 minutos
 const MAX_RETRIES = 2;
 const RETRY_DELAY = 1000;
 const API_TIMEOUT = 15000;
 
-// Fetch with retry
+// Fetch con reintentos
 async function fetchWithRetry(url: string, options: RequestInit, retries: number): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -39,9 +38,9 @@ async function fetchWithRetry(url: string, options: RequestInit, retries: number
   throw new Error('Max retries reached');
 }
 
-// Schemas
+// Esquemas
 const HyperswitchConfigSchema = z.object({
-  publishableKey: z.string().min(1).regex(/^(snd_[a-zA-Z0-9]+)/, 'Invalid publishable key format'),
+  apiKey: z.string().min(1).regex(/^(snd_[a-zA-Z0-9]+)/, 'Invalid API key format'),
   merchantId: z.string().min(1).regex(/^(merchant_[a-zA-Z0-9]+)/, 'Invalid merchant ID format'),
   environment: z.enum(['sandbox', 'production']),
   baseUrl: z.string().url(),
@@ -66,9 +65,9 @@ const PaymentIntentSchema = z.object({
   client_secret: z.string().min(1).optional(),
 }).strict();
 
-// Types
+// Tipos
 interface HyperswitchConfig {
-  publishableKey: string;
+  apiKey: string;
   merchantId: string;
   environment: 'sandbox' | 'production';
   baseUrl: string;
@@ -111,26 +110,25 @@ interface HyperswitchContextValue {
     metadata?: Record<string, any>;
   }) => Promise<PaymentIntent>;
   confirmPayment: (paymentId: string, paymentMethodData?: any) => Promise<any>;
-  getPublishableKey: () => string | null;
+  getApiKey: () => string | null;
   isInitialized: () => boolean;
 }
 
-// Context
+// Contexto
 const HyperswitchContext = createContext<HyperswitchContextValue | undefined>(undefined);
 
-// Provider
+// Proveedor
 export function HyperswitchProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, fetchWithAuth, authState } = useAuth();
-  const { getAvailablePaymentMethods } = useConnectors();
   const [config, setConfig] = useState<HyperswitchConfig | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize client
+  // Inicializar cliente
   const initializeClient = useCallback(async () => {
-    if (!isAuthenticated || !authState?.merchantId) {
+    if (!isAuthenticated || !authState?.merchantId || !authState?.environment || !authState?.customerId) {
       logger.warn('Missing auth state for initializing Hyperswitch client');
-      setError('Usuario no autenticado');
+      setError('Usuario no autenticado o datos faltantes');
       return;
     }
 
@@ -138,29 +136,22 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
     setError(null);
 
     try {
-      const response = await fetchWithRetry(
-        '/api/auth/publishable-key',
-        {
-          method: 'GET',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-        },
-        MAX_RETRIES
-      );
+      // Obtener apiKey de la cookie
+      const sessionCookie = typeof window !== 'undefined' ? document.cookie
+        .split('; ')
+        .find(row => row.startsWith('hyperswitch_session='))
+        ?.split('=')[1] : null;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        const errorMessage = errorData.error || 'Failed to get publishable key';
-        logger.error({ status: response.status, error: errorMessage }, 'Publishable key fetch failed');
-        throw new Error(errorMessage);
+      if (!sessionCookie) {
+        throw new Error('No session cookie found');
       }
 
-      const data = await response.json();
+      const sessionData = JSON.parse(sessionCookie);
       const validatedConfig = HyperswitchConfigSchema.parse({
-        publishableKey: data.publishable_key,
-        merchantId: data.merchant_id,
-        environment: data.environment,
-        baseUrl: data.environment === 'production' ? API_URLS.production : API_URLS.sandbox,
+        apiKey: sessionData.apiKey,
+        merchantId: authState.merchantId,
+        environment: authState.environment,
+        baseUrl: authState.environment === 'production' ? API_URLS.production : API_URLS.sandbox,
       });
 
       setConfig(validatedConfig);
@@ -168,7 +159,7 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
         {
           merchantId: validatedConfig.merchantId,
           environment: validatedConfig.environment,
-          hasPublishableKey: !!validatedConfig.publishableKey,
+          hasApiKey: !!validatedConfig.apiKey,
         },
         'Hyperswitch client initialized'
       );
@@ -177,15 +168,9 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
       let errorCode = 'UNEXPECTED_ERROR';
 
       if (error instanceof Error) {
-        if (error.message.includes('404')) {
-          errorMessage = 'Clave pública no encontrada';
-          errorCode = 'NOT_FOUND';
-        } else if (error.message.includes('401')) {
-          errorMessage = 'No autorizado para obtener la clave pública';
-          errorCode = 'UNAUTHORIZED';
-        } else if (error.message.includes('429')) {
-          errorMessage = 'Demasiadas solicitudes, intenta de nuevo más tarde';
-          errorCode = 'RATE_LIMIT_EXCEEDED';
+        if (error.message.includes('No session cookie')) {
+          errorMessage = 'Sesión no encontrada';
+          errorCode = 'NO_SESSION';
         }
       } else if (error instanceof z.ZodError) {
         errorMessage = 'Datos de configuración inválidos';
@@ -198,9 +183,9 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, authState?.merchantId]);
+  }, [isAuthenticated, authState]);
 
-  // Get payment methods
+  // Obtener métodos de pago
   const getPaymentMethods = useCallback(
     async (params?: {
       currency?: string;
@@ -226,14 +211,6 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
         );
 
         const validatedResponse = PaymentMethodsResponseSchema.parse(response);
-        
-        // Validate against ConnectorProvider
-        const connectorMethods = getAvailablePaymentMethods();
-        const apiMethods = validatedResponse.payment_methods.map(pm => pm.payment_method);
-        const missingMethods = apiMethods.filter(method => !connectorMethods.includes(method));
-        if (missingMethods.length > 0) {
-          logger.warn({ missingMethods }, 'Payment methods not supported by active connectors');
-        }
 
         // Cache response
         sessionStorage.setItem(
@@ -291,10 +268,10 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
         throw new Error(errorMessage);
       }
     },
-    [config, fetchWithAuth, getAvailablePaymentMethods]
+    [config, fetchWithAuth]
   );
 
-  // Create payment intent
+  // Crear intento de pago
   const createPaymentIntent = useCallback(
     async (paymentData: {
       amount: number;
@@ -352,7 +329,7 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
     [config, fetchWithAuth]
   );
 
-  // Confirm payment
+  // Confirmar pago
   const confirmPayment = useCallback(
     async (paymentId: string, paymentMethodData?: any) => {
       if (!config) {
@@ -367,7 +344,7 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'api-key': config.publishableKey,
+              'api-key': config.apiKey,
             },
             body: JSON.stringify({
               payment_method_data: paymentMethodData,
@@ -412,25 +389,25 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
   );
 
   // Helpers
-  const getPublishableKey = useCallback(() => {
-    return config?.publishableKey || null;
+  const getApiKey = useCallback(() => {
+    return config?.apiKey || null;
   }, [config]);
 
   const isInitialized = useCallback(() => {
-    return !!config && !!config.publishableKey;
+    return !!config && !!config.apiKey;
   }, [config]);
 
-  // Effects
+  // Efectos
   useEffect(() => {
-    if (isAuthenticated && !config && authState?.merchantId) {
+    if (isAuthenticated && !config && authState?.merchantId && authState?.environment && authState?.customerId) {
       initializeClient();
     } else if (!isAuthenticated) {
       setConfig(null);
       setError(null);
     }
-  }, [isAuthenticated, config, initializeClient, authState?.merchantId]);
+  }, [isAuthenticated, config, initializeClient, authState]);
 
-  // Context value
+  // Valor del contexto
   const contextValue: HyperswitchContextValue = {
     config,
     isLoading,
@@ -439,7 +416,7 @@ export function HyperswitchProvider({ children }: { children: React.ReactNode })
     getPaymentMethods,
     createPaymentIntent,
     confirmPayment,
-    getPublishableKey,
+    getApiKey,
     isInitialized,
   };
 
