@@ -6,7 +6,7 @@ const logger = pino({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
 });
 
-// Configuración de rutas
+// Configuración de rutas públicas que NO requieren autenticación
 const PUBLIC_ROUTES = [
   '/login',
   '/signup',
@@ -26,25 +26,15 @@ const API_AUTH_ROUTES = [
   '/api/auth/publishable-key',
 ];
 
-const STATIC_ROUTES = [
-  '/_next',
-  '/favicon.ico',
-  '/robots.txt',
-  '/manifest.json',
-  '/sw.js',
-  '/workbox-',
-];
-
-// Función para verificar si una ruta es pública
+// Función para verificar si una ruta es pública (solo para rutas que no son manejadas por el matcher)
 function isPublicRoute(pathname: string, method: string): boolean {
-  // Allow POST to /api/auth explicitly
+  // Permitir POST a /api/auth explícitamente
   if (method === 'POST' && pathname === '/api/auth') {
     return true;
   }
   return (
     PUBLIC_ROUTES.some((route) => pathname.startsWith(route)) ||
-    API_AUTH_ROUTES.some((route) => pathname.startsWith(route)) ||
-    STATIC_ROUTES.some((route) => pathname.startsWith(route))
+    API_AUTH_ROUTES.some((route) => pathname.startsWith(route))
   );
 }
 
@@ -73,12 +63,12 @@ async function verifySessionCookie(sessionCookie: string | undefined): Promise<b
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const method = request.method; // Fix: Get method from request, not request.nextUrl
+  const method = request.method;
 
   // Log para debugging
   logger.info({ method, pathname }, 'Middleware processing request');
 
-  // Permitir rutas públicas sin verificación
+  // Permitir rutas públicas definidas en isPublicRoute sin verificación
   if (isPublicRoute(pathname, method)) {
     logger.debug({ pathname, method }, 'Public route, bypassing session check');
     return NextResponse.next();
@@ -135,10 +125,12 @@ export const config = {
     /*
      * Aplicar middleware a todas las rutas excepto:
      * - api/auth/* (manejan su propia autenticación)
-     * - _next/static (archivos estáticos)
-     * - _next/image (optimización de imágenes)
-     * - favicon.ico, robots.txt, etc.
+     * - _next/static (archivos estáticos de Next.js)
+     * - _next/image (optimización de imágenes de Next.js)
+     * - favicon.ico, robots.txt, manifest.json, sw.js, workbox- (archivos estáticos comunes)
+     * - Cualquier archivo con extensiones de imagen o de recursos estáticos
      */
-    '/((?!_next/static|_next/image|favicon.ico|robots.txt|manifest.json|sw.js|workbox-).*)',
+    '/((?!api/auth|_next/static|_next/image|favicon.ico|robots.txt|manifest.json|sw.js|workbox-|.+\.(?:png|jpg|jpeg|gif|svg|webp|ico|css|js)$).*)',
   ],
 };
+

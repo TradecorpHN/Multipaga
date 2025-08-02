@@ -1,8 +1,9 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { cookies } from 'next/headers';
 import pino from 'pino';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
+import { cookies } from 'next/headers';
 
 // Logger
 const logger = pino({
@@ -10,63 +11,58 @@ const logger = pino({
   base: { pid: process.pid, hostname: process.env.HOSTNAME || 'unknown' },
 });
 
-// Rate Limiter (5 requests per minute per IP)
+// Rate Limiter
 const rateLimiter = new RateLimiterMemory({
-  points: 5,
+  points: 10,
   duration: 60,
 });
 
 // Constants
-const API_TIMEOUT = 15000; // 15 seconds timeout
-const SESSION_DURATION = 3600 * 8; // 8 hours
+const API_TIMEOUT = 15000;
 const API_URLS = {
   sandbox: 'https://sandbox.hyperswitch.io',
   production: 'https://api.hyperswitch.io',
 };
+const MAX_RETRIES = 2;
 
-// Schema for Hyperswitch customers/list response
-const customersListSchema = z
-  .array(
-    z.object({
-      customer_id: z.string().min(1, 'Customer ID is required'),
-      name: z.string().nullable(),
-      email: z.string().email().nullable(),
-      phone: z.string().nullable(),
-      phone_country_code: z.string().nullable(),
-      description: z.string().nullable(),
-      address: z.any().nullable(),
-      created_at: z.string().datetime(),
-      metadata: z.any().nullable(),
-      default_payment_method_id: z.string().nullable(),
-    })
-  )
-  .min(1, 'At least one customer is required');
-
-// Schema for request body
-const requestSchema = z.object({
-  apiKey: z
-    .string()
-    .min(1, 'API Key es requerida')
-    .min(10, 'API Key debe tener al menos 10 caracteres')
-    .max(128, 'API Key no debe exceder 128 caracteres')
-    .regex(/^(snd_[a-zA-Z0-9]{10,})$/, 'API Key debe comenzar con "snd_" y contener solo caracteres alfanuméricos'),
+// Validation schema
+const loginSchema = z.object({
+  apiKey: z.string().regex(/^(snd_[a-zA-Z0-9]{10,})$/, 'API Key debe comenzar con "snd_"'),
+  merchantId: z.string().regex(/^(merchant_[a-zA-Z0-9]{10,})$/, 'Merchant ID debe comenzar con "merchant_"'),
+  profileId: z.string().regex(/^(pro_[a-zA-Z0-9]{10,})$/, 'Profile ID debe comenzar con "pro_"'),
+  customerId: z.string().min(1, 'Customer ID es requerido'),
   environment: z.enum(['sandbox', 'production']).default('sandbox'),
 });
 
-// Interface for response
-interface LoginResponse {
-  success: boolean;
-  code?: string;
-  error?: string;
-  details?: Array<{ field?: string; message: string }>;
-  customer?: {
-    customer_id: string;
-    customer_name: string | null;
-    environment: 'sandbox' | 'production';
-  };
-  session?: {
-    expires_at: string;
-  };
+const customersListSchema = z.array(z.object({ customer_id: z.string().min(1) })).catch((ctx) => {
+  logger.warn({ error: ctx.error, input: ctx.input }, 'Flexible parsing for customersListSchema');
+  return ctx.input;
+});
+
+const businessProfileSchema = z.array(z.object({ profile_id: z.string().min(1) })).catch((ctx) => {
+  logger.warn({ error: ctx.error, input: ctx.input }, 'Flexible parsing for businessProfileSchema');
+  return ctx.input;
+});
+
+const customerSchema = z.object({ customer_id: z.string().min(1) }).catch((ctx) => {
+  logger.warn({ error: ctx.error, input: ctx.input }, 'Flexible parsing for customerSchema');
+  return ctx.input;
+});
+
+// Fetch with retry
+async function fetchWithRetry(url: string, options: RequestInit, retries: number): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, { ...options, signal: AbortSignal.timeout(API_TIMEOUT) });
+    } catch (error) {
+      if (attempt === retries || (error instanceof Error && error.name !== 'AbortError')) {
+        throw error;
+      }
+      logger.warn({ url, attempt }, 'Retrying API request');
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
+  }
+  throw new Error('Max retries reached');
 }
 
 export async function POST(request: NextRequest) {
@@ -84,7 +80,6 @@ export async function POST(request: NextRequest) {
           success: false,
           error: 'Demasiadas solicitudes, intenta de nuevo más tarde',
           code: 'RATE_LIMIT_EXCEEDED',
-          details: [{ message: 'Demasiadas solicitudes' }],
         },
         { status: 429 }
       );
@@ -94,11 +89,10 @@ export async function POST(request: NextRequest) {
     let requestData: unknown;
     try {
       requestData = await request.json();
-      const loggableRequestData =
-        typeof requestData === 'object' && requestData !== null
-          ? { ...(requestData as Record<string, unknown>), apiKey: '[REDACTED]' }
-          : '[REDACTED]';
-      logger.debug({ ip, requestData: loggableRequestData }, 'Raw request body');
+      const loggableData = typeof requestData === 'object' && requestData !== null
+        ? { ...requestData, apiKey: '[REDACTED]' }
+        : { data: '[INVALID_REQUEST_DATA]' };
+      logger.debug({ ip, requestData: loggableData }, 'Raw request body');
     } catch (error) {
       logger.error({ ip, error }, 'Failed to parse request body');
       return NextResponse.json(
@@ -106,14 +100,13 @@ export async function POST(request: NextRequest) {
           success: false,
           error: 'Cuerpo de solicitud inválido',
           code: 'INVALID_JSON',
-          details: [{ message: 'Cuerpo de solicitud inválido' }],
         },
         { status: 400 }
       );
     }
 
     // Validate request data
-    const parsedData = requestSchema.safeParse(requestData);
+    const parsedData = loginSchema.safeParse(requestData);
     if (!parsedData.success) {
       const details = parsedData.error.errors.map((e) => ({
         field: e.path.join('.'),
@@ -126,188 +119,134 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { apiKey, environment } = parsedData.data;
+    const { apiKey, merchantId, profileId, customerId, environment } = parsedData.data;
     const apiUrl = API_URLS[environment];
-    logger.debug({ ip, environment }, 'Initiating Hyperswitch API request');
+    logger.debug({ ip, environment }, 'Initiating Hyperswitch API authentication');
 
-    // Call Hyperswitch /customers/list
-    const hyperswitchApiResponse = await fetch(`${apiUrl}/customers/list`, {
-      method: 'GET',
-      headers: {
-        'api-key': apiKey,
-        'Accept': 'application/json',
-        'User-Agent': 'NextjsApp/1.0',
-      },
-      signal: AbortSignal.timeout(API_TIMEOUT),
-    });
+    // Validate credentials with minimal requests
+    const errors: { field: string; message: string }[] = [];
 
-    // Log response time
-    const responseTime = Date.now() - startTime;
-    logger.debug({ ip, responseTime }, 'Hyperswitch API response time');
-
-    // Check content type
-    const contentType = hyperswitchApiResponse.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      const rawText = await hyperswitchApiResponse.text();
-      logger.error({ ip, contentType, rawText }, 'Non-JSON response from Hyperswitch');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Respuesta inválida de la API de Hyperswitch',
-          code: 'INVALID_RESPONSE',
-          details: [{ field: 'apiKey', message: 'Respuesta inválida de la API de Hyperswitch' }],
+    // 1. Validate apiKey and merchantId with /account/{merchantId}/business_profile
+    let response = await fetchWithRetry(
+      `${apiUrl}/account/${merchantId}/business_profile`,
+      {
+        method: 'GET',
+        headers: {
+          'api-key': apiKey,
+          'Accept': 'application/json',
+          'User-Agent': 'NextjsApp/1.0',
         },
-        { status: 502 }
-      );
-    }
-
-    // Handle non-OK responses
-    if (!hyperswitchApiResponse.ok) {
-      const rawErrorText = await hyperswitchApiResponse.text();
-      logger.error({ ip, status: hyperswitchApiResponse.status, rawErrorText }, 'Hyperswitch API returned non-OK status');
-      let errorMessage = 'No se pudo validar la API Key';
-      let errorCode = `HS_${hyperswitchApiResponse.status}`;
-      let details: Array<{ field?: string; message: string }> = [
-        { field: 'apiKey', message: errorMessage },
-      ];
+      },
+      MAX_RETRIES
+    );
+    if (!response.ok) {
+      const rawErrorText = await response.text();
+      let errorMessage = 'No se pudo validar la API Key o Merchant ID';
+      let errorCode = `HS_${response.status}`;
       try {
         const errorData = JSON.parse(rawErrorText);
-        logger.error({ ip, status: hyperswitchApiResponse.status, errorCode, errorData }, 'Hyperswitch API request failed with error data');
-        errorMessage = errorData.error?.message || errorMessage;
+        errorMessage = errorData.error?.message || 'API key o Merchant ID inválidos';
         errorCode = errorData.error?.code ? `HS_${errorData.error.code}` : errorCode;
-        details = [{ field: 'apiKey', message: errorMessage }];
       } catch (error) {
-        logger.error({ ip, status: hyperswitchApiResponse.status, error, rawErrorText }, 'Failed to parse error response from Hyperswitch API, raw text provided');
+        logger.error({ ip, status: response.status, rawErrorText }, 'Failed to parse business profile error');
       }
+      errors.push(
+        { field: 'apiKey', message: errorMessage },
+        { field: 'merchantId', message: errorMessage }
+      );
+      logger.error({ ip, status: response.status, rawErrorText }, 'apiKey and merchantId validation failed');
       return NextResponse.json(
-        { success: false, error: errorMessage, code: errorCode, details },
-        { status: hyperswitchApiResponse.status === 401 ? 401 : 400 }
+        { success: false, error: 'Credenciales inválidas', code: errorCode, details: errors },
+        { status: response.status === 401 ? 401 : 400 }
       );
     }
-
-    // Parse and validate response
-    let responseData: unknown;
-    try {
-      responseData = await hyperswitchApiResponse.json();
-      logger.debug({ ip, responseData }, 'Hyperswitch API response');
-    } catch (error) {
-      logger.error({ ip, error }, 'Failed to parse Hyperswitch API response');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Respuesta inválida de la API de Hyperswitch',
-          code: 'INVALID_RESPONSE',
-          details: [{ field: 'apiKey', message: 'Respuesta inválida de la API de Hyperswitch' }],
-        },
-        { status: 502 }
+    const businessProfileData = await response.json();
+    if (!businessProfileSchema.safeParse(businessProfileData).success || 
+        !businessProfileData.some((p: { profile_id: string }) => p.profile_id === profileId)) {
+      errors.push(
+        { field: 'merchantId', message: 'Formato de respuesta inválido para Merchant ID o Profile ID no encontrado' },
+        { field: 'profileId', message: 'Profile ID no encontrado o no asociado al Merchant ID' }
       );
-    }
-
-    const customers = customersListSchema.safeParse(responseData);
-    if (!customers.success) {
-      logger.warn({ ip, error: customers.error }, 'Invalid Hyperswitch response format');
+      logger.warn({ ip, profileId, responseData: businessProfileData }, 'Invalid business profile response or Profile ID not found');
       return NextResponse.json(
-        {
-          success: false,
-          error: 'Formato de respuesta inválido de la API de Hyperswitch',
-          code: 'INVALID_RESPONSE_FORMAT',
-          details: [{ field: 'apiKey', message: 'Formato de respuesta inválido' }],
-        },
+        { success: false, error: 'Credenciales inválidas', code: 'INVALID_RESPONSE_FORMAT', details: errors },
         { status: 400 }
       );
     }
 
-    // Additional validation: Ensure customer has valid data
-    const customer = customers.data[0];
-    if (!customer.customer_id || customer.created_at === 'Invalid Date') {
-      logger.warn({ ip, customerId: customer.customer_id }, 'Invalid customer data');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Datos de cliente inválidos',
-          code: 'INVALID_CUSTOMER_DATA',
-          details: [{ field: 'apiKey', message: 'Datos de cliente inválidos' }],
+    // 2. Validate customerId
+    response = await fetchWithRetry(
+      `${apiUrl}/customers/${customerId}`,
+      {
+        method: 'GET',
+        headers: {
+          'api-key': apiKey,
+          'merchant-id': merchantId,
+          'Accept': 'application/json',
+          'User-Agent': 'NextjsApp/1.0',
         },
+      },
+      MAX_RETRIES
+    );
+    if (!response.ok) {
+      const rawErrorText = await response.text();
+      let errorMessage = 'No se pudo validar el Customer ID';
+      let errorCode = `HS_${response.status}`;
+      try {
+        const errorData = JSON.parse(rawErrorText);
+        errorMessage = errorData.error?.message || 'Customer ID no encontrado';
+        errorCode = errorData.error?.code ? `HS_${errorData.error.code}` : errorCode;
+      } catch (error) {
+        logger.error({ ip, status: response.status, rawErrorText }, 'Failed to parse customer error');
+      }
+      errors.push({ field: 'customerId', message: errorMessage });
+      logger.error({ ip, status: response.status, rawErrorText }, 'Customer ID validation failed');
+      return NextResponse.json(
+        { success: false, error: 'Credenciales inválidas', code: errorCode, details: errors },
+        { status: response.status === 404 ? 400 : response.status }
+      );
+    }
+    const customerData = await response.json();
+    if (!customerSchema.safeParse(customerData).success || customerData.customer_id !== customerId) {
+      errors.push({ field: 'customerId', message: 'Customer ID no encontrado o no coincide' });
+      logger.warn({ ip, customerId, responseData: customerData }, 'Invalid or mismatched Customer ID');
+      return NextResponse.json(
+        { success: false, error: 'Credenciales inválidas', code: 'INVALID_CUSTOMER_ID', details: errors },
         { status: 400 }
       );
     }
 
-    logger.info({ ip, customerId: customer.customer_id }, 'Customer validated successfully');
-
-    // Set session cookie
-    const sessionExpiresAt = new Date(Date.now() + SESSION_DURATION * 1000);
+    // Create session
     const sessionData = {
-      customerId: customer.customer_id,
-      customerName: customer.name,
+      customerId,
+      customerName: null,
       environment,
+      merchantId,
+      profileId,
       isAuthenticated: true,
-      expiresAt: sessionExpiresAt.toISOString(),
-      apiKey: apiKey.slice(0, 8) + '...', // Store partial API key for security
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+      apiKey,
     };
 
-    cookies().set('hyperswitch_session', JSON.stringify(sessionData), {
+    cookies().set({
+      name: 'hyperswitch_session',
+      value: JSON.stringify(sessionData),
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: SESSION_DURATION,
       path: '/',
+      maxAge: 24 * 60 * 60, // 24 hours
     });
 
-    // Set environment cookie
-    cookies().set('hyperswitch_env', environment, {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 30 * 24 * 3600,
-      path: '/',
-    });
-
-    // Prepare response
-    const loginResponse: LoginResponse = {
-      success: true,
-      customer: {
-        customer_id: customer.customer_id,
-        customer_name: customer.name,
-        environment,
-      },
-      session: {
-        expires_at: sessionExpiresAt.toISOString(),
-      },
-    };
-
-    const finalNextResponse = NextResponse.json(loginResponse, { status: 200 });
-
-    // Add security headers
-    finalNextResponse.headers.set('X-Content-Type-Options', 'nosniff');
-    finalNextResponse.headers.set('X-Frame-Options', 'DENY');
-    finalNextResponse.headers.set('Content-Security-Policy', "default-src 'self'; frame-ancestors 'none'");
-    if (process.env.NODE_ENV === 'production') {
-      finalNextResponse.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-    }
-
-    logger.info({ ip, customerId: customer.customer_id, responseTime }, 'Login successful');
-    return finalNextResponse;
+    logger.info({ ip, customerId, responseTime: Date.now() - startTime }, 'Login successful');
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      logger.error({ ip, error }, 'Hyperswitch API request timed out');
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Tiempo de espera agotado al validar la API Key',
-          code: 'API_TIMEOUT',
-          details: [{ field: 'apiKey', message: 'Tiempo de espera agotado' }],
-        },
-        { status: 504 }
-      );
-    }
-
     logger.error({ ip, error }, 'Unexpected error during login');
     return NextResponse.json(
       {
         success: false,
-        error: 'Error inesperado en el servidor',
-        code: 'INTERNAL_ERROR',
-        details: [{ message: 'Error inesperado en el servidor' }],
+        error: 'Error inesperado al iniciar sesión',
+        code: 'UNEXPECTED_ERROR',
       },
       { status: 500 }
     );

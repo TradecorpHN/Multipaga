@@ -218,7 +218,7 @@ export function usePayments(): UsePaymentsReturn {
     options: RequestInit = {}
   ): Promise<T> => {
     // Validar autenticación
-    if (!authState?.isAuthenticated || !authState?.apiKey || !authState?.merchantId || !authState?.profileId) {
+    if (!authState?.isAuthenticated || !authState?.merchantId || !authState?.profileId) {
       throw new PaymentApiError('AUTH_REQUIRED', 'Autenticación requerida. Por favor inicie sesión.', 401)
     }
 
@@ -229,7 +229,8 @@ export function usePayments(): UsePaymentsReturn {
     const headers = new Headers({
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': `Bearer ${authState.apiKey}`,
+      // Skip Authorization header since apiKey is not available in authState
+      // Authorization will be handled by the proxy layer
       'X-Merchant-Id': authState.merchantId,
       'X-Profile-Id': authState.profileId,
       ...options.headers,

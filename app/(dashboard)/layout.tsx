@@ -8,11 +8,11 @@ import { useAuth } from '@/presentation/contexts/AuthContext'
 import {
   LayoutDashboard,
   CreditCard,
-  RefreshCw,
+  RefreshCcw,
   FileText,
   AlertTriangle,
   CheckSquare,
-  Cable,
+  Zap,
   Menu,
   X,
   LogOut,
@@ -20,26 +20,42 @@ import {
   ChevronRight,
   Loader2,
   Search,
+  Users,
+  Receipt,
+  Settings,
+  Key,
+  Send,
+  Banknote,
+  BarChart3,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+  Bell,
+  HelpCircle,
+  Activity
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import toast from 'react-hot-toast'
 import Image from 'next/image'
 
-// Web3-inspired color palette
+// Paleta de colores sincronizada con el dashboard premium
 const MULTIPAGA_COLORS = {
-  primary: '#00BFFF', // Neon Cyan
-  primaryDark: '#0066CC',
-  secondary: '#00FFFF',
-  accent: '#9333EA', // Neon Purple
-  success: '#00FF7F',
-  warning: '#FFD700',
-  error: '#FF1493', // Neon Pink
-  background: '#0A1122', // Deep Space Blue
+  primary: '#1e40af', // Blue-700 (coherente con dashboard)
+  primaryDark: '#1e3a8a', // Blue-800
+  secondary: '#3b82f6', // Blue-500
+  accent: '#60a5fa', // Blue-400
+  success: '#10b981', // Emerald-500
+  warning: '#f59e0b', // Amber-500
+  error: '#ef4444', // Red-500
+  background: 'from-blue-900 via-blue-800 to-blue-900', // Coherente con dashboard
   gradient: {
-    primary: 'from-cyan-500 via-blue-600 to-purple-600',
-    tech: 'from-cyan-400 via-blue-500 to-purple-500',
-    success: 'from-emerald-400 via-green-500 to-teal-600',
-    header: 'from-slate-900/95 via-cyan-900/90 to-purple-900/90',
+    primary: 'from-blue-600 to-blue-700',
+    secondary: 'from-blue-500 to-blue-600',
+    success: 'from-green-500 to-green-600',
+    warning: 'from-yellow-500 to-yellow-600',
+    error: 'from-red-500 to-red-600',
+    header: 'from-blue-900/95 via-blue-800/90 to-blue-900/95',
+    sidebar: 'from-blue-900/95 via-blue-800/90 to-blue-900/95',
   },
 }
 
@@ -48,15 +64,71 @@ interface DashboardLayoutProps {
   children: ReactNode
 }
 
-// Navigation items
-const navigationItems = [
-  { name: 'Inicio', href: '/', icon: LayoutDashboard },
-  { name: 'Conectores', href: '/connectors', icon: Cable },
-  { name: 'Pagos', href: '/payments', icon: CreditCard },
-  { name: 'Reembolsos', href: '/refunds', icon: RefreshCw },
-  { name: 'Transacciones', href: '/transactions', icon: FileText },
-  { name: 'Disputas', href: '/disputes', icon: AlertTriangle },
-  { name: 'Reconciliación', href: '/reconciliation', icon: CheckSquare },
+// Categorías de navegación (sincronizadas con el dashboard)
+interface NavigationCategory {
+  id: string
+  name: string
+  items: NavigationItem[]
+  icon: React.ComponentType<any>
+  gradient: string
+}
+
+interface NavigationItem {
+  name: string
+  href: string
+  icon: React.ComponentType<any>
+  badge?: string
+  requiresConnector?: boolean
+}
+
+// Elementos de navegación organizados por categorías (todos los 13 módulos)
+const navigationCategories: NavigationCategory[] = [
+  {
+    id: 'core',
+    name: 'Principal',
+    icon: LayoutDashboard,
+    gradient: MULTIPAGA_COLORS.gradient.primary,
+    items: [
+      { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { name: 'Pagos', href: '/payments', icon: CreditCard },
+      { name: 'Transacciones', href: '/transactions', icon: Receipt },
+      { name: 'Conectores', href: '/connectors', icon: Zap },
+    ]
+  },
+  {
+    id: 'financial',
+    name: 'Financiero',
+    icon: BarChart3,
+    gradient: MULTIPAGA_COLORS.gradient.success,
+    items: [
+      { name: 'Reembolsos', href: '/refunds', icon: RefreshCcw, requiresConnector: true },
+      { name: 'Disputas', href: '/disputes', icon: AlertTriangle, requiresConnector: true },
+      { name: 'Pagos Salientes', href: '/payouts', icon: Send, requiresConnector: true },
+      { name: 'Conciliación', href: '/reconciliation', icon: CheckSquare, requiresConnector: true },
+      { name: 'Remesas', href: '/remittances', icon: Banknote, requiresConnector: true },
+    ]
+  },
+  {
+    id: 'management',
+    name: 'Gestión',
+    icon: Users,
+    gradient: 'from-purple-600 to-purple-700',
+    items: [
+      { name: 'Clientes', href: '/customers', icon: Users },
+      { name: 'Facturas', href: '/invoices', icon: FileText },
+      { name: 'Mandatos', href: '/mandates', icon: Shield, requiresConnector: true },
+    ]
+  },
+  {
+    id: 'security',
+    name: 'Seguridad',
+    icon: Settings,
+    gradient: MULTIPAGA_COLORS.gradient.error,
+    items: [
+      { name: 'Vault', href: '/vault', icon: Key },
+      { name: 'Configuración', href: '/settings', icon: Settings },
+    ]
+  }
 ]
 
 // Hook to handle client-side rendering
@@ -66,104 +138,270 @@ const useIsClient = () => {
   return isClient
 }
 
-// Optimized Multipaga Logo
+// Logo de Multipaga optimizado (coherente con dashboard)
 interface MultipagaLogoProps {
   size?: 'small' | 'default' | 'large'
   className?: string
 }
 
 const MultipagaLogo = ({ size = 'default', className = '' }: MultipagaLogoProps) => {
+  const [imageError, setImageError] = useState(false)
   const isClient = useIsClient()
+  
   const sizeConfig = {
-    small: { width: '30vw', maxWidth: 120, height: 40 },
-    default: { width: '35vw', maxWidth: 160, height: 50 },
-    large: { width: '40vw', maxWidth: 200, height: 60 },
+    small: { width: 120, height: 40 },
+    default: { width: 160, height: 50 },
+    large: { width: 200, height: 60 },
   }
   const config = sizeConfig[size]
 
-  if (!isClient) {
-    return (
-      <div
-        className={clsx('relative flex items-center justify-center', className)}
-        style={{ width: config.maxWidth, height: config.height }}
-      >
-        <div
-          className={`w-full h-full bg-gradient-to-r ${MULTIPAGA_COLORS.gradient.primary} rounded-md flex items-center justify-center shadow-md shadow-cyan-500/20`}
-        >
-          <span className="text-white font-bold text-base">Multipaga</span>
+  const fallbackLogo = (
+    <div
+      className={`relative flex items-center justify-center bg-gradient-to-r ${MULTIPAGA_COLORS.gradient.primary} rounded-xl shadow-lg mx-auto`}
+      style={{ width: config.width, height: config.height }}
+    >
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
+          <span className="text-blue-600 font-bold text-lg">M</span>
         </div>
+        <span className="text-white font-bold text-lg">Multipaga</span>
       </div>
+    </div>
+  )
+
+  if (!isClient || imageError) {
+    return (
+      <motion.div
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        className={clsx('flex items-center justify-center', className)}
+      >
+        {fallbackLogo}
+      </motion.div>
     )
   }
 
   return (
     <motion.div
-      whileHover={{ scale: 1.05, rotate: 3 }}
+      whileHover={{ scale: 1.05 }}
       whileTap={{ scale: 0.95 }}
-      transition={{ duration: 0.3 }}
-      className={clsx('relative flex items-center justify-center', className)}
-      style={{ width: config.maxWidth, height: config.height }}
+      transition={{ duration: 0.2 }}
+      className={clsx('flex items-center justify-center mx-auto', className)}
+      style={{ width: config.width, height: config.height }}
     >
-      <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-md">
+      <div className="relative w-full h-full flex items-center justify-center overflow-hidden rounded-xl">
         <Image
           src="/logotext.png"
           alt="Multipaga Logo"
           fill
-          sizes="(max-width: 768px) 30vw, 160px"
+          sizes={`${config.width}px`}
           className="object-contain transition-all duration-300 hover:brightness-110"
           priority
-          onError={() => {
-            console.warn('Error loading Multipaga logo')
-            toast.error('No se pudo cargar el logo')
-          }}
+          onError={() => setImageError(true)}
         />
       </div>
     </motion.div>
   )
 }
 
-// Dynamic Web3 Wave Background
-const DynamicWaveBackground = () => {
+// Fondo premium sincronizado con el dashboard
+const PremiumBackground = () => {
   const isClient = useIsClient()
+  
   if (!isClient) return null
 
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-[0.08] z-[-1]">
-      <svg className="w-full h-full" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={MULTIPAGA_COLORS.primary} stopOpacity="0.7" />
-            <stop offset="50%" stopColor={MULTIPAGA_COLORS.accent} stopOpacity="0.6" />
-            <stop offset="100%" stopColor={MULTIPAGA_COLORS.primaryDark} stopOpacity="0.7" />
-          </linearGradient>
-          <filter id="waveGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        {[0, 1, 2, 3].map((i) => (
-          <motion.path
-            key={`wave-${i}`}
-            d={`M0,${300 + i * 50} Q250,${250 + i * 60} 500,${300 + i * 50} T1000,${300 + i * 50}`}
-            fill="none"
-            stroke="url(#waveGradient)"
-            strokeWidth="2.5"
-            filter="url(#waveGlow)"
-            animate={{
-              d: [
-                `M0,${300 + i * 50} Q250,${250 + i * 60} 500,${300 + i * 50} T1000,${300 + i * 50}`,
-                `M0,${300 + i * 50} Q250,${350 + i * 60} 500,${300 + i * 50} T1000,${300 + i * 50}`,
-              ],
-              opacity: [0.4, 0.8, 0.4],
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {/* Elementos de fondo sutiles con animaciones mejoradas (coherente con dashboard) */}
+      <div className="absolute -inset-10 opacity-15">
+        <motion.div 
+          className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-400 rounded-full mix-blend-multiply filter blur-xl"
+          animate={{ 
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 0.6, 0.3],
+            x: [0, 50, 0],
+            y: [0, -30, 0]
+          }}
+          transition={{ 
+            duration: 8, 
+            repeat: Infinity, 
+            ease: "easeInOut" 
+          }}
+        />
+        <motion.div 
+          className="absolute top-1/3 right-1/4 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-xl"
+          animate={{ 
+            scale: [1.2, 1, 1.2],
+            opacity: [0.4, 0.7, 0.4],
+            x: [0, -40, 0],
+            y: [0, 40, 0]
+          }}
+          transition={{ 
+            duration: 10, 
+            repeat: Infinity, 
+            ease: "easeInOut",
+            delay: 2
+          }}
+        />
+        <motion.div 
+          className="absolute bottom-1/4 left-1/3 w-96 h-96 bg-blue-600 rounded-full mix-blend-multiply filter blur-xl"
+          animate={{ 
+            scale: [1, 1.3, 1],
+            opacity: [0.2, 0.5, 0.2],
+            x: [0, 30, 0],
+            y: [0, -50, 0]
+          }}
+          transition={{ 
+            duration: 12, 
+            repeat: Infinity, 
+            ease: "easeInOut",
+            delay: 4
+          }}
+        />
+      </div>
+      
+      {/* Partículas flotantes (coherente con dashboard) */}
+      <div className="absolute inset-0">
+        {Array.from({ length: 20 }, (_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-blue-300 rounded-full opacity-30"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
             }}
-            transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
-            aria-hidden="true"
+            animate={{
+              y: [0, -100, 0],
+              opacity: [0, 0.6, 0],
+            }}
+            transition={{
+              duration: 3 + Math.random() * 2,
+              repeat: Infinity,
+              delay: Math.random() * 2,
+              ease: "easeInOut"
+            }}
           />
         ))}
-      </svg>
+      </div>
+    </div>
+  )
+}
+
+// Componente de categoría de navegación
+const NavigationCategory = ({ 
+  category, 
+  isExpanded, 
+  onToggle, 
+  currentPath,
+  hasConnectors = false 
+}: { 
+  category: NavigationCategory
+  isExpanded: boolean
+  onToggle: () => void
+  currentPath: string
+  hasConnectors?: boolean
+}) => {
+  const isClient = useIsClient()
+  const hasActiveItem = category.items.some(item => currentPath === item.href)
+
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={onToggle}
+        className={clsx(
+          'group flex items-center justify-between w-full p-3 text-sm font-semibold rounded-xl border transition-all duration-200',
+          hasActiveItem || isExpanded
+            ? `bg-gradient-to-r ${category.gradient} text-white border-blue-400/30 shadow-lg`
+            : 'text-blue-200/80 hover:bg-white/10 hover:text-white border-transparent hover:border-blue-400/20'
+        )}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className={clsx(
+              'p-2 rounded-lg transition-all duration-200',
+              hasActiveItem || isExpanded
+                ? 'bg-white/20 shadow-lg'
+                : 'bg-white/10 group-hover:bg-white/15'
+            )}
+          >
+            <category.icon className="w-4 h-4" />
+          </div>
+          <span>{category.name}</span>
+        </div>
+        {isClient && (
+          <motion.div
+            animate={{ rotate: isExpanded ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ChevronDown className="w-4 h-4" />
+          </motion.div>
+        )}
+      </button>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+            className="ml-4 space-y-1 overflow-hidden"
+          >
+            {category.items.map((item) => {
+              const isActive = currentPath === item.href
+              const isDisabled = item.requiresConnector && !hasConnectors
+
+              return (
+                <Link
+                  key={item.name}
+                  href={isDisabled ? '#' : item.href}
+                  className={clsx(
+                    'group flex items-center gap-3 p-2.5 text-sm font-medium rounded-lg border transition-all duration-200',
+                    isActive
+                      ? `bg-gradient-to-r ${MULTIPAGA_COLORS.gradient.primary} text-white border-blue-400/30 shadow-sm`
+                      : isDisabled
+                      ? 'text-blue-200/40 cursor-not-allowed border-transparent'
+                      : 'text-blue-200/70 hover:bg-white/10 hover:text-white border-transparent hover:border-blue-400/20'
+                  )}
+                  onClick={isDisabled ? (e) => e.preventDefault() : undefined}
+                >
+                  <div
+                    className={clsx(
+                      'p-1.5 rounded-md transition-all duration-200',
+                      isActive
+                        ? 'bg-white/20 shadow-sm'
+                        : isDisabled
+                        ? 'bg-white/5'
+                        : 'bg-white/10 group-hover:bg-white/15'
+                    )}
+                  >
+                    <item.icon className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="flex-1">{item.name}</span>
+                  {item.badge && (
+                    <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded-full">
+                      {item.badge}
+                    </span>
+                  )}
+                  {isDisabled && (
+                    <span className="text-xs text-blue-200/40">Requiere conector</span>
+                  )}
+                  {isActive && isClient && (
+                    <motion.div
+                      initial={{ scale: 0, rotate: -90 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <ChevronRight className="text-blue-300 w-3.5 h-3.5" />
+                    </motion.div>
+                  )}
+                </Link>
+              )
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -172,13 +410,36 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
   const { authState, logout, isLoading } = useAuth()
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    core: true, // Principal expandido por defecto
+  })
   const isClient = useIsClient()
+
+  // Determinar si hay conectores disponibles (simulado)
+  const hasConnectors = true // En producción, esto vendría del contexto o hook
 
   useEffect(() => {
     if (!isLoading && !authState?.isAuthenticated) {
       window.location.href = '/login'
     }
   }, [authState, isLoading])
+
+  // Auto-expandir categoría activa
+  useEffect(() => {
+    navigationCategories.forEach(category => {
+      const hasActiveItem = category.items.some(item => pathname === item.href)
+      if (hasActiveItem && !expandedCategories[category.id]) {
+        setExpandedCategories(prev => ({ ...prev, [category.id]: true }))
+      }
+    })
+  }, [pathname, expandedCategories])
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId]
+    }))
+  }
 
   const handleLogout = async () => {
     try {
@@ -192,13 +453,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading || !authState?.isAuthenticated) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-slate-900 via-cyan-900 to-purple-900">
+      <div className={`fixed inset-0 flex items-center justify-center bg-gradient-to-br ${MULTIPAGA_COLORS.background}`}>
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
           className="flex items-center gap-3"
         >
-          <Loader2 className="w-8 h-8 text-cyan-400" />
+          <Loader2 className="w-8 h-8 text-blue-400" />
           <span className="text-white text-base font-medium">Cargando sistema...</span>
         </motion.div>
       </div>
@@ -218,7 +479,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           height: 100vh;
           width: 100vw;
           overflow-x: hidden;
-          background: ${MULTIPAGA_COLORS.background};
+          background: linear-gradient(to bottom right, #1e3a8a, #1e40af, #1e3a8a);
         }
 
         .dashboard-container {
@@ -229,10 +490,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         }
 
         .dashboard-sidebar {
-          width: 260px;
-          background: linear-gradient(to bottom, rgba(10, 17, 34, 0.95), rgba(6, 182, 212, 0.85));
-          border-right: 1px solid rgba(34, 211, 238, 0.25);
-          backdrop-filter: blur(14px);
+          width: 280px;
+          background: linear-gradient(to bottom, rgba(30, 58, 138, 0.95), rgba(30, 64, 175, 0.90));
+          border-right: 1px solid rgba(96, 165, 250, 0.20);
+          backdrop-filter: blur(20px);
           position: fixed;
           top: 0;
           bottom: 0;
@@ -248,7 +509,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           left: 0;
           right: 0;
           height: 2px;
-          background: linear-gradient(to right, transparent, ${MULTIPAGA_COLORS.primary}, transparent);
+          background: linear-gradient(to right, transparent, #3b82f6, transparent);
           animation: glowWave 3.5s infinite ease-in-out;
         }
 
@@ -257,22 +518,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           display: flex;
           flex-direction: column;
           min-height: 100vh;
-          width: calc(100% - 260px);
-          margin-left: 260px;
+          width: calc(100% - 280px);
+          margin-left: 280px;
         }
 
         .dashboard-header {
           position: sticky;
           top: 0;
-          height: 60px;
-          background: linear-gradient(to right, rgba(10, 17, 34, 0.95), rgba(6, 182, 212, 0.85));
-          border-bottom: 1px solid rgba(34, 211, 238, 0.25);
-          backdrop-filter: blur(14px);
+          height: 70px;
+          background: linear-gradient(to right, rgba(30, 58, 138, 0.95), rgba(30, 64, 175, 0.90));
+          border-bottom: 1px solid rgba(96, 165, 250, 0.20);
+          backdrop-filter: blur(20px);
           z-index: 40;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 0 1rem;
+          padding: 0 1.5rem;
         }
 
         .dashboard-header-content {
@@ -281,12 +542,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           justify-content: space-between;
           width: 100%;
           max-width: 1400px;
-          gap: 0.75rem;
+          gap: 1rem;
         }
 
         .dashboard-content {
           flex: 1;
-          padding: 1.25rem;
+          padding: 0;
           overflow-y: auto;
           background: transparent;
         }
@@ -300,7 +561,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         @media (max-width: 1024px) {
           .dashboard-sidebar {
             transform: translateX(-100%);
-            width: 240px;
+            width: 280px;
           }
           .dashboard-sidebar.open {
             transform: translateX(0);
@@ -310,42 +571,35 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             margin-left: 0;
           }
           .dashboard-header {
-            height: 56px;
+            height: 64px;
           }
           .dashboard-header-content {
-            padding: 0 0.75rem;
-            gap: 0.5rem;
-          }
-          .search-container {
-            max-width: 12rem;
+            padding: 0 1rem;
+            gap: 0.75rem;
           }
         }
 
         @media (max-width: 640px) {
-          .dashboard-content {
-            padding: 0.75rem;
+          .dashboard-header-content {
+            gap: 0.5rem;
           }
           .search-container {
             max-width: 10rem;
-          }
-          .dashboard-header-content {
-            flex-wrap: nowrap;
-            gap: 0.5rem;
           }
           .status-container {
             display: none;
           }
         }
 
-        @supports not (backdrop-filter: blur(14px)) {
+        @supports not (backdrop-filter: blur(20px)) {
           .dashboard-sidebar, .dashboard-header {
-            background: linear-gradient(to right, rgba(10, 17, 34, 0.98), rgba(6, 182, 212, 0.9));
+            background: linear-gradient(to right, rgba(30, 58, 138, 0.98), rgba(30, 64, 175, 0.95));
           }
         }
       `}</style>
 
       <div className="dashboard-container">
-        <DynamicWaveBackground />
+        <PremiumBackground />
 
         <AnimatePresence>
           {isSidebarOpen && (
@@ -366,93 +620,78 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           className={clsx('dashboard-sidebar', { open: isSidebarOpen })}
         >
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between h-14 px-3 border-b border-cyan-500/25 bg-gradient-to-r from-slate-900/95 to-cyan-900/90">
-              <Link href="/" className="flex items-center">
-                <MultipagaLogo size="small" />
+            {/* Header del sidebar */}
+            <div className="flex items-center justify-between h-16 px-4 border-b border-blue-400/20 bg-gradient-to-r from-blue-900/95 to-blue-800/90">
+              <Link href="/" className="flex items-center justify-center w-full">
+                <MultipagaLogo size="small" className="mx-auto" />
               </Link>
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="p-2 hover:bg-cyan-700/30 rounded-md transition-colors lg:hidden"
+                className="p-2 hover:bg-blue-700/30 rounded-lg transition-colors lg:hidden"
                 aria-label="Cerrar menú lateral"
               >
-                <X className="w-5 h-5 text-cyan-400" />
+                <X className="w-5 h-5 text-blue-300" />
               </button>
             </div>
 
-            <div className="border-b border-cyan-500/25 p-3">
-              <div className="flex items-center gap-2.5">
+            {/* Información del usuario */}
+            <div className="border-b border-blue-400/20 p-4">
+              <div className="flex items-center gap-3">
                 <div
-                  className={`bg-gradient-to-br ${MULTIPAGA_COLORS.gradient.primary} rounded-full p-1.5 shadow-md shadow-cyan-500/20`}
+                  className={`bg-gradient-to-br ${MULTIPAGA_COLORS.gradient.primary} rounded-full p-2 shadow-lg`}
                 >
-                  <User className="text-white w-4 h-4" />
+                  <User className="text-white w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm font-semibold text-white">
                     {authState?.merchantId}
                   </p>
-                  <p className="truncate text-xs text-cyan-300/80">
-                    {authState?.profileName || authState?.profileId}
+                  <p className="truncate text-xs text-blue-300/80">
+                    {authState?.customerName || authState?.profileId}
                   </p>
                 </div>
                 {isClient && (
                   <motion.div
-                    className="w-2 h-2 bg-green-400 rounded-full shadow-md shadow-green-400/30"
-                    animate={{ opacity: [1, 0.5, 1], scale: [1, 1.3, 1] }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                    className="w-2.5 h-2.5 bg-green-400 rounded-full shadow-lg shadow-green-400/30"
+                    animate={{ opacity: [1, 0.5, 1], scale: [1, 1.2, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                   />
                 )}
               </div>
             </div>
 
-            <nav className="flex-1 overflow-y-auto p-2">
-              <div className="space-y-1.5">
-                {navigationItems.map((item) => {
-                  const isActive = pathname === item.href
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={clsx(
-                        'group flex items-center gap-2.5 p-2.5 text-sm font-medium rounded-md border transition-all duration-200',
-                        isActive
-                          ? `bg-gradient-to-r ${MULTIPAGA_COLORS.gradient.primary} text-white border-cyan-500/30 shadow-sm shadow-cyan-500/15`
-                          : 'text-cyan-100/80 hover:bg-gradient-to-r hover:from-cyan-500/15 hover:to-blue-600/15 hover:text-white border-transparent hover:border-cyan-500/20'
-                      )}
-                    >
-                      <div
-                        className={clsx(
-                          'p-1.5 rounded-md transition-all duration-200',
-                          isActive
-                            ? `bg-gradient-to-r ${MULTIPAGA_COLORS.gradient.tech} shadow-sm shadow-cyan-500/20`
-                            : 'bg-slate-800/40 group-hover:bg-gradient-to-r group-hover:from-cyan-500/30 group-hover:to-blue-600/30'
-                        )}
-                      >
-                        <item.icon className="w-4 h-4" />
-                      </div>
-                      <span>{item.name}</span>
-                      {isActive && isClient && (
-                        <motion.div
-                          initial={{ scale: 0, rotate: -90 }}
-                          animate={{ scale: 1, rotate: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="ml-auto"
-                        >
-                          <ChevronRight className="text-cyan-400 w-4 h-4" />
-                        </motion.div>
-                      )}
-                    </Link>
-                  )
-                })}
-              </div>
+            {/* Navegación por categorías */}
+            <nav className="flex-1 overflow-y-auto p-3 space-y-2">
+              {navigationCategories.map((category) => (
+                <NavigationCategory
+                  key={category.id}
+                  category={category}
+                  isExpanded={expandedCategories[category.id] || false}
+                  onToggle={() => toggleCategory(category.id)}
+                  currentPath={pathname}
+                  hasConnectors={hasConnectors}
+                />
+              ))}
             </nav>
 
-            <div className="border-t border-cyan-500/25 p-2">
+            {/* Footer del sidebar */}
+            <div className="border-t border-blue-400/20 p-3 space-y-2">
+              <button
+                className="flex w-full items-center gap-3 p-3 text-sm font-medium text-blue-200/80 hover:bg-blue-600/20 hover:text-white rounded-lg border border-transparent hover:border-blue-400/30 transition-all duration-200"
+                aria-label="Ayuda y soporte"
+              >
+                <div className="p-1.5 rounded-md bg-white/10 hover:bg-white/15 transition-all duration-200">
+                  <HelpCircle className="w-4 h-4" />
+                </div>
+                <span>Ayuda</span>
+              </button>
+              
               <button
                 onClick={handleLogout}
-                className="flex w-full items-center gap-2.5 p-2.5 text-sm font-medium text-cyan-100/80 hover:bg-gradient-to-r hover:from-red-500/20 hover:to-pink-500/20 hover:text-white rounded-md border border-transparent hover:border-red-500/30 transition-all duration-200"
+                className="flex w-full items-center gap-3 p-3 text-sm font-medium text-blue-200/80 hover:bg-gradient-to-r hover:from-red-500/20 hover:to-pink-500/20 hover:text-white rounded-lg border border-transparent hover:border-red-500/30 transition-all duration-200"
                 aria-label="Cerrar sesión"
               >
-                <div className="p-1.5 rounded-md bg-slate-800/40 hover:bg-gradient-to-r hover:from-red-500/40 hover:to-pink-500/40 transition-all duration-200">
+                <div className="p-1.5 rounded-md bg-white/10 hover:bg-gradient-to-r hover:from-red-500/40 hover:to-pink-500/40 transition-all duration-200">
                   <LogOut className="w-4 h-4" />
                 </div>
                 <span>Cerrar sesión</span>
@@ -462,50 +701,60 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </motion.aside>
 
         <div className="dashboard-main">
+          {/* Header principal */}
           <header className="dashboard-header">
             <motion.div
-              className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-blue-600/15 to-purple-600/10 pointer-events-none"
+              className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-blue-600/15 to-blue-500/10 pointer-events-none"
               animate={{ opacity: [0.3, 0.6, 0.3] }}
               transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
             />
             <div className="dashboard-header-content">
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="lg:hidden p-2 hover:bg-cyan-700/30 rounded-md transition-colors"
+                className="lg:hidden p-2 hover:bg-blue-700/30 rounded-lg transition-colors"
                 aria-label="Abrir menú lateral"
               >
-                <Menu className="w-5 h-5 text-cyan-400" />
+                <Menu className="w-5 h-5 text-blue-300" />
               </button>
 
               <div className="flex items-center justify-center flex-1 min-w-0">
-                <MultipagaLogo size="default" />
+                <MultipagaLogo size="default" className="mx-auto" />
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="relative max-w-[12rem] w-full search-container">
-                  <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-cyan-300/70" />
+              <div className="flex items-center gap-3">
+                <div className="relative max-w-[14rem] w-full search-container">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-300/70" />
                   <input
                     type="text"
-                    placeholder="Buscar..."
-                    className="w-full pl-8 pr-2.5 py-1.5 bg-slate-800/50 border border-cyan-500/25 rounded-md text-white text-sm placeholder-cyan-300/50 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-transparent backdrop-blur-sm transition-all duration-200"
+                    placeholder="Buscar módulos..."
+                    className="w-full pl-9 pr-3 py-2 bg-white/10 border border-blue-400/20 rounded-xl text-white text-sm placeholder-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:border-transparent backdrop-blur-sm transition-all duration-200"
                     aria-label="Buscar en el dashboard"
                   />
                 </div>
 
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/15 border border-green-500/25 rounded-full backdrop-blur-sm status-container">
+                <button
+                  className="p-2 hover:bg-blue-700/30 rounded-lg transition-colors relative"
+                  aria-label="Notificaciones"
+                >
+                  <Bell className="w-5 h-5 text-blue-300" />
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+                </button>
+
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/15 border border-green-500/25 rounded-full backdrop-blur-sm status-container">
                   {isClient && (
                     <motion.div
                       className="w-2 h-2 bg-green-400 rounded-full shadow-sm shadow-green-400/30"
                       animate={{ opacity: [1, 0.5, 1], scale: [1, 1.3, 1] }}
-                      transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                     />
                   )}
-                  <span className="text-green-400 text-xs font-medium">Conectado</span>
+                  <span className="text-green-400 text-xs font-medium">Sistema Activo</span>
                 </div>
               </div>
             </div>
           </header>
 
+          {/* Contenido principal */}
           <main className="dashboard-content">
             {isClient ? (
               <motion.div
