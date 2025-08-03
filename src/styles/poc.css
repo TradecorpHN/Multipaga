@@ -1,0 +1,474 @@
+/* PoC Device Optimizations */
+/* Optimized for touch interfaces and small screens */
+
+/* Touch-friendly button sizes */
+.poc-button {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 12px 24px;
+  font-size: 16px;
+  border-radius: 12px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Larger touch targets for interactive elements */
+.poc-touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px;
+}
+
+/* Optimized form inputs for touch */
+.poc-input {
+  min-height: 48px;
+  padding: 12px 16px;
+  font-size: 16px; /* Prevents zoom on iOS */
+  border-radius: 8px;
+  border: 2px solid #e5e7eb;
+  transition: border-color 0.2s ease;
+}
+
+.poc-input:focus {
+  border-color: #3b82f6;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* High contrast mode for better visibility */
+.poc-high-contrast {
+  --text-primary: #000000;
+  --text-secondary: #333333;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --border-color: #333333;
+  --accent-color: #0066cc;
+}
+
+/* Large text mode */
+.poc-large-text {
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.poc-large-text h1 {
+  font-size: 32px;
+}
+
+.poc-large-text h2 {
+  font-size: 28px;
+}
+
+.poc-large-text h3 {
+  font-size: 24px;
+}
+
+.poc-large-text .text-sm {
+  font-size: 16px;
+}
+
+.poc-large-text .text-xs {
+  font-size: 14px;
+}
+
+/* Simplified navigation for PoC devices */
+.poc-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+  padding: 12px;
+  z-index: 50;
+}
+
+.poc-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  border-radius: 8px;
+  min-height: 60px;
+  text-decoration: none;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+
+.poc-nav-item:hover,
+.poc-nav-item.active {
+  background: #f3f4f6;
+  color: #3b82f6;
+}
+
+.poc-nav-item svg {
+  width: 24px;
+  height: 24px;
+  margin-bottom: 4px;
+}
+
+.poc-nav-item span {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Card optimizations for PoC */
+.poc-card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+  margin-bottom: 16px;
+}
+
+.poc-card-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.poc-card-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.poc-card-description {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 4px 0 0 0;
+}
+
+/* Status indicators optimized for PoC */
+.poc-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  gap: 6px;
+}
+
+.poc-status-success {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.poc-status-warning {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.poc-status-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.poc-status-info {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+/* Loading states for PoC */
+.poc-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: #6b7280;
+}
+
+.poc-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f4f6;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  animation: poc-spin 1s linear infinite;
+}
+
+@keyframes poc-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Modal optimizations for PoC */
+.poc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.poc-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.poc-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.poc-modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.poc-modal-close {
+  background: none;
+  border: none;
+  padding: 8px;
+  border-radius: 8px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.poc-modal-close:hover {
+  background: #f3f4f6;
+}
+
+/* Table optimizations for PoC */
+.poc-table-container {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  background: white;
+}
+
+.poc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.poc-table th {
+  background: #f9fafb;
+  padding: 16px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 14px;
+}
+
+.poc-table td {
+  padding: 16px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #111827;
+  font-size: 14px;
+}
+
+.poc-table tr:hover {
+  background: #f9fafb;
+}
+
+/* Form optimizations for PoC */
+.poc-form-group {
+  margin-bottom: 20px;
+}
+
+.poc-form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.poc-form-error {
+  color: #dc2626;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.poc-form-help {
+  color: #6b7280;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* Payment form specific optimizations */
+.poc-payment-form {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e5e7eb;
+}
+
+.poc-payment-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 12px;
+  color: white;
+}
+
+.poc-payment-amount {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 8px 0;
+}
+
+.poc-payment-method {
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.poc-payment-method:hover {
+  border-color: #d1d5db;
+}
+
+.poc-payment-method.selected {
+  border-color: #3b82f6;
+  background: #f0f9ff;
+}
+
+.poc-payment-method-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.poc-payment-method-radio {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #d1d5db;
+  border-radius: 50%;
+  position: relative;
+}
+
+.poc-payment-method.selected .poc-payment-method-radio {
+  border-color: #3b82f6;
+}
+
+.poc-payment-method.selected .poc-payment-method-radio::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  background: #3b82f6;
+  border-radius: 50%;
+}
+
+/* Responsive breakpoints for PoC devices */
+@media (max-width: 480px) {
+  .poc-button {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+  
+  .poc-modal {
+    margin: 8px;
+    padding: 20px;
+  }
+  
+  .poc-card {
+    margin: 8px;
+    padding: 16px;
+  }
+  
+  .poc-table th,
+  .poc-table td {
+    padding: 12px 8px;
+    font-size: 12px;
+  }
+}
+
+/* Dark mode support for PoC */
+@media (prefers-color-scheme: dark) {
+  .poc-card {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+  
+  .poc-input {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+  
+  .poc-input:focus {
+    border-color: #60a5fa;
+  }
+  
+  .poc-modal {
+    background: #1f2937;
+    color: #f9fafb;
+  }
+  
+  .poc-table th {
+    background: #374151;
+    color: #f9fafb;
+  }
+  
+  .poc-table td {
+    color: #f9fafb;
+  }
+  
+  .poc-table tr:hover {
+    background: #374151;
+  }
+}
+
+/* Accessibility improvements for PoC */
+.poc-focus-visible:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.poc-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .poc-spinner {
+    animation: none;
+  }
+  
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+

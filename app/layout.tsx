@@ -2,8 +2,9 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Providers } from './providers'
 import '@/presentation/styles/globals.css'
+import EnvironmentSwitcher from '@/components/layout/EnvironmentSwitcher'
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
 })
@@ -30,8 +31,15 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          {/* Add EnvironmentSwitcher here, perhaps in a fixed position or a footer */}
+          <div className="fixed bottom-4 right-4 z-50">
+            <EnvironmentSwitcher />
+          </div>
+        </Providers>
       </body>
     </html>
   )
 }
+

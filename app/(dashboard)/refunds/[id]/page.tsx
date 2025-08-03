@@ -32,7 +32,7 @@ import {
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 // Importación corregida del cliente de Hyperswitch
-import { hyperswitchClient } from '/home/kali/multipaga/src/infrastructure/api/clients/HyperswitchClient'
+import { hyperswitchClient } from '@/infrastructure/api/clients/HyperswitchClient'
 import type { RefundResponse, PaymentResponse } from '@/types/hyperswitch'
 
 // Refund Status Configuration

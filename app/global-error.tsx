@@ -1,7 +1,6 @@
 // app/global-error.tsx
 'use client'
 
-import * as Sentry from '@sentry/nextjs'
 import { useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
 
@@ -13,7 +12,8 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    Sentry.captureException(error)
+    // Log error to console in development
+    console.error('Global error:', error)
   }, [error])
 
   return (
@@ -26,14 +26,14 @@ export default function GlobalError({
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                Critical Error
+                Error Crítico
               </h1>
               <p className="mt-2 text-gray-600">
-                A critical error occurred in the application. Our team has been notified.
+                Ocurrió un error crítico en la aplicación. Nuestro equipo ha sido notificado.
               </p>
               {error.digest && (
                 <p className="mt-2 text-sm text-gray-500">
-                  Error ID: {error.digest}
+                  ID del Error: {error.digest}
                 </p>
               )}
             </div>
@@ -42,13 +42,13 @@ export default function GlobalError({
                 onClick={reset}
                 className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
               >
-                Try Again
+                Intentar de Nuevo
               </button>
               <button
                 onClick={() => window.location.href = '/'}
                 className="w-full bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
               >
-                Go to Homepage
+                Ir al Inicio
               </button>
             </div>
           </div>
@@ -57,3 +57,4 @@ export default function GlobalError({
     </html>
   )
 }
+

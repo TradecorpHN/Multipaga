@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // ⚠️ CRÍTICO: NO usar experimental.appDir en Next.js 14+
-  // App Router está habilitado por defecto en Next.js 13.4+
-  
   // React configuration
   reactStrictMode: true,
   
@@ -23,24 +20,12 @@ const nextConfig = {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
 
-  // Redirects
-  async redirects() {
-    return [
-      {
-        source: '/dashboard',
-        destination: '/',
-        permanent: false,
-      },
-    ]
-  },
-
   // Headers de seguridad
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: [
-          // DOCTYPE será manejado automáticamente por Next.js
           {
             key: 'X-DNS-Prefetch-Control',
             value: 'on',
@@ -77,13 +62,6 @@ const nextConfig = {
       })
     }
 
-    // GLSL loader para shaders
-    config.module.rules.push({
-      test: /\.(glsl|vs|fs|vert|frag)$/,
-      exclude: /node_modules/,
-      use: ['raw-loader', 'glslify-loader'],
-    })
-
     // Optimización para desarrollo
     if (dev) {
       config.watchOptions = {
@@ -103,27 +81,19 @@ const nextConfig = {
     } : false,
   },
 
-  // Configuraciones experimentales SEGURAS para Next.js 14
+  // Configuraciones experimentales simplificadas
   experimental: {
     // Server Actions si los necesitas
     serverActions: {
       bodySizeLimit: '2mb',
     },
-    // Optimizaciones de CSS
-    optimizeCss: true,
-    // Mejorar tree shaking
-    serverComponentsExternalPackages: ['@hyperswitch/node'],
   },
 
   // Trailing slash
   trailingSlash: false,
 
-  // Configuración de output para deployment
-  output: 'standalone',
-
   // TypeScript configuration
   typescript: {
-    // ⚠️ Solo usar en desarrollo si tienes errores de tipos que quieres ignorar temporalmente
     ignoreBuildErrors: false,
   },
 
@@ -134,3 +104,4 @@ const nextConfig = {
 }
 
 module.exports = nextConfig
+

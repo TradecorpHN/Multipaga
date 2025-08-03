@@ -46,14 +46,21 @@ async function verifySessionCookie(sessionCookie: string | undefined): Promise<b
 
   try {
     const sessionData = JSON.parse(sessionCookie);
-    if (!sessionData.customerId || !sessionData.apiKey || !sessionData.expiresAt) {
+    if (!sessionData.userId || !sessionData.email || !sessionData.isAuthenticated) {
       logger.warn('Invalid session data structure');
       return false;
     }
-    if (new Date(sessionData.expiresAt) < new Date()) {
-      logger.warn('Session expired');
-      return false;
+    
+    // Verificar si la sesión no ha expirado (opcional, basado en loginTime)
+    if (sessionData.loginTime) {
+      const sessionAge = Date.now() - sessionData.loginTime;
+      const maxAge = 24 * 60 * 60 * 1000; // 24 horas
+      if (sessionAge > maxAge) {
+        logger.warn('Session expired based on login time');
+        return false;
+      }
     }
+    
     return true;
   } catch (error) {
     logger.error({ error: error instanceof Error ? error.message : 'Unknown error' }, 'Error parsing session cookie');
@@ -75,7 +82,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Verificar sesión para rutas protegidas
-  const sessionCookie = request.cookies.get('hyperswitch_session')?.value;
+  const sessionCookie = request.cookies.get('session')?.value;
 
   if (!sessionCookie) {
     logger.warn({ pathname }, 'No session cookie found, redirecting to login');
@@ -96,8 +103,8 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
     }
     const response = NextResponse.redirect(loginUrl);
-    response.cookies.delete('hyperswitch_session');
-    response.cookies.delete('auth_response');
+    response.cookies.delete('session');
+    response.cookies.delete('temp_session');
     return response;
   }
 

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { getApiUrl } from '@/lib/environment';
 
 export async function GET(request: NextRequest) {
   try {
+    // Get session from cookie
     const sessionCookie = cookies().get('session');
     
     if (!sessionCookie) {
@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
       }, { status: 401 });
     }
 
-    const HYPERSWITCH_API_URL = getApiUrl();
+    // --- INTEGRACIÓN CON LA API REAL DE HYPERSWITCH ---
+    const HYPERSWITCH_API_URL = process.env.HYPERSWITCH_API_URL;
 
     if (!HYPERSWITCH_API_URL) {
       console.error('HYPERSWITCH_API_URL no está configurada en las variables de entorno.');
@@ -35,7 +36,8 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const hyperswitchResponse = await fetch(`${HYPERSWITCH_API_URL}/payments/list`, {
+    // Fetch customers from Hyperswitch API
+    const hyperswitchResponse = await fetch(`${HYPERSWITCH_API_URL}/customers/list`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -46,21 +48,21 @@ export async function GET(request: NextRequest) {
     const hyperswitchData = await hyperswitchResponse.json();
 
     if (!hyperswitchResponse.ok) {
-      console.error('Error al obtener pagos de Hyperswitch:', hyperswitchData);
+      console.error('Error al obtener clientes de Hyperswitch:', hyperswitchData);
       return NextResponse.json({
         success: false,
-        error: hyperswitchData.message || 'Error al obtener pagos',
+        error: hyperswitchData.message || 'Error al obtener clientes',
         code: hyperswitchData.code || 'HYPERSWITCH_ERROR',
       }, { status: hyperswitchResponse.status });
     }
 
     return NextResponse.json({
       success: true,
-      payments: hyperswitchData.data || [],
+      customers: hyperswitchData.data || [],
     });
 
   } catch (error) {
-    console.error('Error al listar pagos:', error);
+    console.error('Error al listar clientes:', error);
     
     return NextResponse.json({
       success: false,
